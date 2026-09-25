@@ -1,0 +1,59 @@
+%% RealtyTrack — Período de origen frente a mes de caja
+%%
+%% Fuente versionable del diagrama conceptual que ilustra docs/data-model.md §7
+%% "Período de origen y mes de caja".
+%% Debe mantenerse consistente con ese documento: si ambos difieren, manda el documento.
+%% No introduce ninguna entidad, columna ni regla que data-model.md no defina.
+%%
+%% Qué representa: las dos dimensiones temporales del modelo, que conviven y no compiten.
+%%   - Período de origen  -> pago_esperado.periodo y credito_registro_mensual.periodo
+%%   - Mes de caja        -> abono_arriendo.fecha_recepcion,
+%%                           credito_registro_mensual.fecha_pago_dividendo,
+%%                           movimiento_financiero.fecha y aporte_capital.fecha (§7.1)
+%%
+%% El ejemplo marzo -> abril es deliberadamente concreto: hace evidente que un pago
+%% correspondiente a marzo puede afectar al flujo de caja de abril.
+
+flowchart TB
+    subgraph OBL["PERIODO DE ORIGEN — marzo 2026"]
+        direction TB
+        PE["ARRIENDO<br/>pago_esperado<br/>periodo = 2026-03<br/>monto_esperado_clp = 600.000"]
+        CRM1["HIPOTECA<br/>credito_registro_mensual<br/>periodo = 2026-03<br/>mensualidad hipotecaria"]
+    end
+
+    subgraph CAJA["MES DE CAJA — abril 2026"]
+        direction TB
+        AB["ARRIENDO<br/>abono_arriendo<br/>fecha_recepcion = 05-04-2026<br/>monto_clp = 600.000"]
+        CRM2["HIPOTECA<br/>credito_registro_mensual<br/>fecha_pago_dividendo = 03-04-2026<br/>dividendo_pagado_clp = 850.000"]
+    end
+
+    VMAR["Consulta de MARZO<br/>esperado vs recibido<br/>serie mensual del credito"]
+    VABR["Flujo financiero de ABRIL<br/>ingresos y egresos del mes"]
+    ROT["Rotulo derivado en pantalla<br/>Correspondiente a marzo 2026<br/>NINGUNA columna lo almacena"]
+
+    PE ==>|"periodo de origen"| VMAR
+    CRM1 ==>|"periodo de origen"| VMAR
+    AB ==>|"fecha de caja"| VABR
+    CRM2 ==>|"fecha de caja"| VABR
+
+    PE -. "dos tablas unidas por clave foranea 1:N" .-> AB
+    CRM1 -. "dos columnas de la MISMA fila" .-> CRM2
+
+    AB -. "abono_arriendo a pago_esperado a periodo" .-> ROT
+    CRM2 -. "periodo de la propia fila" .-> ROT
+
+%% Lecturas del diagrama, todas ya escritas en data-model.md §7:
+%%
+%% 1. El desfase no es una anomalia. Un mismo hecho alimenta dos consultas distintas sin
+%%    contradiccion: el abono de 600.000 esta en el esperado vs recibido de marzo Y en los
+%%    ingresos de abril, porque responden a preguntas diferentes.
+%%
+%% 2. Las dos dimensiones se guardan de forma distinta segun el caso. En el arriendo viven
+%%    en dos tablas unidas por clave foranea; en la hipoteca, en dos columnas de la misma
+%%    fila de credito_registro_mensual.
+%%
+%% 3. El rotulo es un calculo, no un dato. Se obtiene recorriendo la relacion existente o
+%%    leyendo el periodo de la propia fila. Ningun campo de texto libre es su sitio (§7.4).
+%%
+%% 4. credito_registro_mensual.periodo NUNCA imputa caja. La imputacion al flujo mensual
+%%    usa siempre la fecha real del hecho (§7.1).

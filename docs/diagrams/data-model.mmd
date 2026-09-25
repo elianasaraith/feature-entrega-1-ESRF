@@ -1,0 +1,179 @@
+%% RealtyTrack — Modelo de datos (ERD completo)
+%%
+%% Fuente versionable del diagrama de docs/data-model.md §3 "Diagrama del modelo de datos".
+%% Debe mantenerse consistente con ese documento: si ambos difieren, manda el documento.
+%% Las trece entidades, sus atributos y las quince relaciones son las que definen
+%% docs/data-model.md §4 (entidades) y §5 (relaciones y cardinalidades).
+%%
+%% Convenciones: la precisión de los NUMERIC va en el comentario de cada atributo
+%% (docs/data-model.md §2). El período mensual es DATE normalizada al día 1 del mes.
+
+erDiagram
+    USUARIO {
+        uuid id PK
+        text email UK "NOT NULL"
+        text password_hash "NOT NULL"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    PROPIEDAD {
+        uuid id PK
+        text numero_departamento "NOT NULL"
+        text direccion "NULL - propuesta a validar"
+        numeric superficie_m2 "NOT NULL - 8,2"
+        numeric valor_compra_monto "NOT NULL - 14,4 - decimales cero si CLP"
+        moneda valor_compra_moneda "NOT NULL - UF o CLP"
+        date fecha_compra "NOT NULL"
+        text estacionamiento "NULL - ausente si NULL"
+        text bodega "NULL - ausente si NULL"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    CREDITO_HIPOTECARIO {
+        uuid id PK
+        uuid propiedad_id FK "NOT NULL UNIQUE"
+        text banco "NOT NULL"
+        text numero_credito "NULL"
+        date fecha_otorgamiento "NULL"
+        numeric monto_original_uf "NULL - 12,4"
+        numeric cuota_contractual_uf "NOT NULL - 12,4"
+        numeric tasa_interes_anual "NOT NULL - 6,4"
+        integer numero_cuotas_total "NOT NULL"
+        numeric seguros_uf "NULL - 12,4"
+        smallint dia_vencimiento "NOT NULL - 1 a 31"
+        numeric saldo_inicial_uf "NULL - 12,4"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    CREDITO_REGISTRO_MENSUAL {
+        uuid id PK
+        uuid credito_id FK "NOT NULL"
+        date periodo "NOT NULL - mensualidad hipotecaria"
+        numeric dividendo_pagado_clp "NULL - 14,0"
+        date fecha_pago_dividendo "NULL - fecha de caja"
+        numeric saldo_pendiente_uf "NULL - 12,4"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    ARRENDATARIO {
+        uuid id PK
+        text nombre "NOT NULL"
+        text rut UK "NULL"
+        text email "NULL"
+        text telefono "NULL"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    CONTRATO_ARRIENDO {
+        uuid id PK
+        uuid propiedad_id FK "NOT NULL"
+        uuid arrendatario_id FK "NOT NULL"
+        date fecha_inicio "NOT NULL"
+        date fecha_termino "NOT NULL"
+        numeric garantia_clp "NULL - 14,0"
+        smallint dia_esperado_pago "NOT NULL - 1 a 31"
+        text observaciones "NULL"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    CONTRATO_MONTO {
+        uuid id PK
+        uuid contrato_id FK "NOT NULL"
+        numeric monto_mensual_clp "NOT NULL - 14,0"
+        date vigente_desde_periodo "NOT NULL"
+        text motivo "NULL"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    PAGO_ESPERADO {
+        uuid id PK
+        uuid contrato_id FK "NOT NULL"
+        date periodo "NOT NULL - mes arrendado"
+        numeric monto_esperado_clp "NOT NULL - 14,0"
+        date fecha_esperada "NOT NULL"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    ABONO_ARRIENDO {
+        uuid id PK
+        uuid pago_esperado_id FK "NOT NULL"
+        numeric monto_clp "NOT NULL - 14,0"
+        date fecha_recepcion "NOT NULL - fecha de caja"
+        text medio "NULL"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    MOVIMIENTO_FINANCIERO {
+        uuid id PK
+        uuid propiedad_id FK "NOT NULL"
+        date fecha "NOT NULL - fecha de caja"
+        categoria_movimiento categoria "NOT NULL"
+        numeric monto_clp "NOT NULL - 14,0"
+        text descripcion "NULL"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    APORTE_CAPITAL {
+        uuid id PK
+        uuid propiedad_id FK "NOT NULL"
+        uuid movimiento_financiero_id FK "NULL"
+        date fecha "NOT NULL - fecha de caja"
+        numeric monto_clp "NOT NULL - 14,0"
+        motivo_aporte motivo "NOT NULL"
+        text descripcion "NULL"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    VALOR_UF_PERIODO {
+        date periodo PK
+        numeric valor_clp "NOT NULL - 12,2"
+        date fecha_valor "NOT NULL - dia concreto usado"
+        text fuente "NOT NULL"
+        timestamptz obtenido_en "NOT NULL"
+    }
+
+    DOCUMENTO {
+        uuid id PK
+        uuid propiedad_id FK "NOT NULL"
+        uuid credito_id FK "NULL - excluyente"
+        uuid contrato_id FK "NULL - excluyente"
+        uuid abono_arriendo_id FK "NULL - excluyente"
+        uuid movimiento_financiero_id FK "NULL - excluyente"
+        tipo_documento tipo "NOT NULL"
+        text nombre_archivo "NOT NULL"
+        text mime_type "NOT NULL"
+        bigint tamano_bytes "NOT NULL"
+        text storage_key UK "NOT NULL"
+        timestamptz subido_en "NOT NULL"
+    }
+
+    PROPIEDAD ||--o| CREDITO_HIPOTECARIO : "tiene como maximo uno"
+    CREDITO_HIPOTECARIO ||--o{ CREDITO_REGISTRO_MENSUAL : "registra mes a mes"
+    PROPIEDAD ||--o{ CONTRATO_ARRIENDO : "arrienda mediante"
+    ARRENDATARIO ||--o{ CONTRATO_ARRIENDO : "es parte de"
+    CONTRATO_ARRIENDO ||--|{ CONTRATO_MONTO : "rige por"
+    CONTRATO_ARRIENDO ||--o{ PAGO_ESPERADO : "genera"
+    PAGO_ESPERADO ||--o{ ABONO_ARRIENDO : "se cubre con"
+    PROPIEDAD ||--o{ MOVIMIENTO_FINANCIERO : "incurre en"
+    PROPIEDAD ||--o{ APORTE_CAPITAL : "recibe"
+    MOVIMIENTO_FINANCIERO ||--o{ APORTE_CAPITAL : "es financiado por"
+    PROPIEDAD ||--o{ DOCUMENTO : "agrupa"
+    CREDITO_HIPOTECARIO ||--o{ DOCUMENTO : "respaldado por"
+    CONTRATO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
+    ABONO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
+    MOVIMIENTO_FINANCIERO ||--o{ DOCUMENTO : "respaldado por"
+
+%% USUARIO y VALOR_UF_PERIODO no tienen relaciones: el primero solo guarda credenciales
+%% —el MVP es de usuario único, así que ninguna entidad de dominio lleva usuario_id— y el
+%% segundo es una tabla de referencia que se consulta por período.

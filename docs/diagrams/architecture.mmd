@@ -1,0 +1,44 @@
+%% RealtyTrack — Diagrama principal de componentes
+%%
+%% Fuente versionable del diagrama de docs/architecture.md §4 "Diagrama de componentes".
+%% Debe mantenerse consistente con ese documento: si ambos difieren, manda el documento.
+%% No introduce ningún componente ni relación que architecture.md no describa.
+%%
+%% Entrega 1: arquitectura propuesta, no implementada.
+
+flowchart TB
+    Navegador["Navegador<br/>propietario-inversor"]
+
+    subgraph Vercel["Vercel — aplicación Next.js"]
+        direction TB
+        UI["app/<br/>Server Components + Client Components"]
+        API["app/api/<br/>Route Handlers — API REST"]
+        SRV["server/services/<br/>Lógica de negocio y orquestación"]
+        DOM["server/domain/<br/>Funciones puras — derivaciones"]
+        DB["server/db/<br/>Prisma Client"]
+        UF["server/uf/<br/>Puerto ProveedorUf"]
+        ST["server/storage/<br/>Puerto AlmacenDocumentos"]
+        AUTH["auth<br/>Auth.js + middleware"]
+    end
+
+    PG[("Neon<br/>PostgreSQL")]
+    APIUF["API pública de UF<br/>proveedor a validar"]
+    S3[("Object storage<br/>compatible con S3<br/>proveedor a validar")]
+
+    Navegador -->|"HTTP · lectura"| UI
+    Navegador -->|"HTTP · escritura"| API
+    Navegador -.->|"subida directa<br/>URL firmada"| S3
+
+    AUTH -.->|"protege"| UI
+    AUTH -.->|"protege"| API
+
+    UI -->|"lectura directa"| SRV
+    API --> SRV
+    SRV --> DOM
+    SRV --> DB
+    SRV --> UF
+    SRV --> ST
+
+    DB --> PG
+    UF --> APIUF
+    ST -->|"firma URLs"| S3

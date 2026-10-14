@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: realtytrack
+      POSTGRES_PASSWORD: realtytrack
+      POSTGRES_DB: realtytrack
+    ports:
+      - "5436:5432"
+    volumes:
+      - realtytrack_db_data:/var/lib/postgresql/data
+
+volumes:
+  realtytrack_db_data:

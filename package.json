@@ -8,13 +8,18 @@
     "start": "next start",
     "lint": "eslint",
     "db:seed": "tsx prisma/seed.ts",
-    "db:verify": "tsx scripts/verify-db-connection.ts"
+    "db:seed:user": "tsx prisma/seed-user.ts",
+    "db:verify": "tsx scripts/verify-db-connection.ts",
+    "test": "node --env-file-if-exists=.env --require ./tests/setup/stub-server-only.cjs --import tsx --test tests/auth/*.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "argon2": "0.45.1",
     "next": "16.4.0",
+    "next-auth": "5.0.0-beta.32",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",

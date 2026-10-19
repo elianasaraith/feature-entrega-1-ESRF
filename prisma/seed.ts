@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { seedUsuario } from "./seed-usuario";
 
 const prisma = new PrismaClient();
 
@@ -36,6 +37,8 @@ const propiedadesFicticias = [
 ];
 
 async function main() {
+  await seedUsuario(prisma);
+
   for (const propiedad of propiedadesFicticias) {
     await prisma.propiedad.create({ data: propiedad });
   }

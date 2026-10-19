@@ -22,7 +22,7 @@
 
 ### **0.1. Tu nombre completo:**
 
-_Pendiente de confirmación._
+Eliana Rodriguez
 
 ### **0.2. Nombre del proyecto:**
 

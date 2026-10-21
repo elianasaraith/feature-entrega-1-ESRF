@@ -149,7 +149,13 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 ### **2.6. Tests**
 
-*Sin prompt distintivo propio: la estrategia de testing se definió dentro del prompt inicial de 2.2, sin una corrección puntual separada.*
+*La estrategia de testing se definió dentro del prompt inicial de 2.2. El siguiente prompt corresponde a la implementación de las pruebas de integración de T01.*
+
+**Prompt 1:**
+
+*Fragmento del mensaje de implementación de T01 (seguridad de datos en las pruebas).*
+
+> 6. Seguridad de datos: no modificar ni eliminar las 3 propiedades existentes. No ejecutar TRUNCATE. No ejecutar el seed completo. No ejecutar pruebas de integración contra la base de desarrollo por defecto. Las pruebas de integración deben requerir TEST_DATABASE_URL explícita y utilizar una BD de pruebas independiente. Las pruebas solo pueden eliminar sus propios datos.
 
 ---
 
@@ -346,6 +352,14 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 > Mantén todos los demás puntos del plan actual.
 >
 > Actualiza únicamente el plan. No edites todavía los archivos.
+
+**Prompt 3:**
+
+*Implementación posterior del ticket T01 (Gestión de propiedades) con OpenSpec: fragmento del mensaje que aprobó el plan y fijó las precisiones de autenticación, pruebas de integración y validaciones.*
+
+> 1. Autenticación: las rutas /api/* sin sesión deben responder 401 JSON. Las páginas protegidas deben seguir redirigiendo a /login. No alterar /api/auth/*. Mantener requireSession() en los Route Handlers.
+> 2. Pruebas de integración: no modificar ni eliminar las 3 propiedades existentes. No ejecutar TRUNCATE ni el seed completo. Las pruebas deben crear y limpiar exclusivamente sus propios registros. Preferir una BD de pruebas aislada si resulta sencillo.
+> 3. Validaciones: utilizar Zod con reglas específicas para Propiedad. Validar fechas calendario reales, no solo YYYY-MM-DD. Respetar los tipos y restricciones de Prisma/PostgreSQL. Evitar abstracciones genéricas innecesarias.
 
 ---
 

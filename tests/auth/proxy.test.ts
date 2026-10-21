@@ -31,3 +31,13 @@ test("ruta protegida sin sesión redirige a /login", async () => {
     `esperaba redirect a /login, obtuve: ${location}`
   );
 });
+
+test("API sin sesión responde 401 JSON sin redirigir", async () => {
+  const request = new NextRequest(new URL("http://localhost:3000/api/propiedades"));
+  const response = await (proxy as unknown as ProxyFn)(request);
+
+  assert.ok(response, "proxy debería devolver una respuesta");
+  assert.equal(response?.status, 401);
+  assert.equal(response?.headers.get("location"), null);
+  assert.deepEqual(await response?.json(), { error: "No autenticado" });
+});

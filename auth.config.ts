@@ -10,8 +10,14 @@ export const authConfig: NextAuthConfig = {
   },
   providers: [],
   callbacks: {
-    authorized({ auth }) {
-      return Boolean(auth?.user);
+    authorized({ auth, request }) {
+      if (auth?.user) return true;
+      // La API responde 401 JSON en lugar de redirigir a /login (T01).
+      // /api/auth/* ya queda fuera del matcher de proxy.ts.
+      if (request.nextUrl.pathname.startsWith("/api/")) {
+        return Response.json({ error: "No autenticado" }, { status: 401 });
+      }
+      return false;
     },
   },
 };

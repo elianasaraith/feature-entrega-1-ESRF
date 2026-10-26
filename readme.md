@@ -114,7 +114,7 @@ flowchart TD
     Login["Pantalla de acceso<br/>(auth)/login"] --> Cartera["Cartera<br/>app/propiedades"]
     Cartera --> Detalle["Detalle de propiedad<br/>crédito · contrato · pagos · egresos · aportes · documentos"]
     Cartera --> Dashboard["Dashboard mensual<br/>app/dashboard"]
-    Detalle --> Registro["Registro mensual del crédito<br/>app/creditos"]
+    Detalle --> Registro["Registro mensual del crédito<br/>app/propiedades/[id]/credito/registro-mensual"]
     Detalle --> Contrato["Contratos, reajustes, pagos y abonos<br/>app/contratos"]
     Dashboard -.->|"abrir propiedad"| Detalle
 ```
@@ -236,9 +236,8 @@ Detalle: [docs/architecture.md](docs/architecture.md) §3, §5.
 ```
 app/
   (auth)/login/     pantalla de acceso
-  propiedades/      cartera y detalle de propiedad
+  propiedades/      cartera, detalle de propiedad y su crédito (propiedades/[id]/credito)
   contratos/        contratos, reajustes, pagos y abonos
-  creditos/         registro mensual de dividendo y saldo
   dashboard/        flujo financiero mensual de cartera
   api/              Route Handlers — API REST
 server/

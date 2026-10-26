@@ -157,6 +157,23 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 > 6. Seguridad de datos: no modificar ni eliminar las 3 propiedades existentes. No ejecutar TRUNCATE. No ejecutar el seed completo. No ejecutar pruebas de integración contra la base de desarrollo por defecto. Las pruebas de integración deben requerir TEST_DATABASE_URL explícita y utilizar una BD de pruebas independiente. Las pruebas solo pueden eliminar sus propios datos.
 
+*Los dos prompts siguientes corresponden al ticket T02 (Gestión de créditos hipotecarios) y se registran aquí, junto al de T01, porque fijan su estrategia de pruebas; la sección 6 ya alcanzó el máximo de tres prompts.*
+
+**Prompt 2:**
+
+*Fragmento del mensaje que aprobó el plan de T02 y fijó las precisiones sobre pruebas, conversión UF→CLP y códigos HTTP.*
+
+> 1. Mantener la conversión UF→CLP como función pura, utilizando valores fijos únicamente en pruebas. La interfaz debe mostrar «No disponible» hasta implementar T10. El AC3 quedará pendiente de integración.
+> 3. PUT debe actualizar únicamente créditos existentes. Si la propiedad no tiene crédito, debe devolver 404. POST debe devolver 409 si ya existe un crédito asociado.
+> 5. Las pruebas de integración deben ejecutarse exclusivamente con TEST_DATABASE_URL, sin modificar ni eliminar datos de la BD de desarrollo.
+
+**Prompt 3:**
+
+*Fragmento del mensaje que autorizó `/opsx:apply` de T02 y fijó las reglas de seguridad de datos para pruebas y migración.*
+
+> 4. Mantén TEST_DATABASE_URL como requisito obligatorio para las pruebas de integración. No permitas que utilicen DATABASE_URL como alternativa.
+> 5. Genera la migración de Prisma, pero antes de aplicarla a la BD de desarrollo quiero revisar el SQL generado. No elimines ni modifiques los registros existentes de propiedades.
+
 ---
 
 ## 3. Modelo de Datos

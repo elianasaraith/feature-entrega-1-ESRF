@@ -54,6 +54,9 @@ async function DetallePropiedad({ params }: { params: Promise<{ id: string }> })
           </div>
         ))}
       </dl>
+      <Link href={`/propiedades/${p.id}/credito`} className="mt-6 inline-block text-sm underline">
+        Crédito hipotecario
+      </Link>
     </>
   );
 }

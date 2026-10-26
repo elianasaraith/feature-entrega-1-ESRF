@@ -204,9 +204,8 @@ después, en la siguiente lectura, a partir del monto corregido.
 ```
 app/
   (auth)/login/              pantalla de acceso
-  propiedades/               cartera y detalle de propiedad
+  propiedades/               cartera, detalle de propiedad y su crédito (propiedades/[id]/credito)
   contratos/                 contratos, reajustes, pagos y abonos
-  creditos/                  registro mensual de dividendo y saldo
   dashboard/                 flujo financiero mensual de cartera
   api/                       Route Handlers — API REST
 server/

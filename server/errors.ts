@@ -8,6 +8,13 @@ export class NotFoundError extends Error {
   }
 }
 
+export class ConflictError extends Error {
+  constructor(message = "Conflicto con el estado actual del recurso") {
+    super(message);
+    this.name = "ConflictError";
+  }
+}
+
 // Único punto de traducción de errores a HTTP (architecture.md §17).
 export function toHttpResponse(error: unknown): Response {
   if (error instanceof ZodError) {
@@ -20,6 +27,9 @@ export function toHttpResponse(error: unknown): Response {
   }
   if (error instanceof NotFoundError) {
     return Response.json({ error: error.message }, { status: 404 });
+  }
+  if (error instanceof ConflictError) {
+    return Response.json({ error: error.message }, { status: 409 });
   }
   console.error(error);
   return Response.json({ error: "Error interno" }, { status: 500 });

@@ -32,7 +32,34 @@ model Propiedad {
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  credito CreditoHipotecario?
+
   @@map("propiedad")
+}
+
+// Condiciones contractuales del crédito (T02). docs/data-model.md §4.3.
+// Sin columna de saldo vigente ni equivalentes en CLP (data-model §4.3,
+// architecture §10.3). Los CHECK (cuota > 0, tasa >= 0, cuotas > 0, día 1..31,
+// monto original > 0, seguros >= 0, saldo inicial >= 0) viven en la migración SQL.
+model CreditoHipotecario {
+  id                 String    @id @default(uuid()) @db.Uuid
+  propiedadId        String    @unique @map("propiedad_id") @db.Uuid
+  banco              String
+  numeroCredito      String?   @map("numero_credito")
+  fechaOtorgamiento  DateTime? @map("fecha_otorgamiento") @db.Date
+  montoOriginalUf    Decimal?  @map("monto_original_uf") @db.Decimal(12, 4)
+  cuotaContractualUf Decimal   @map("cuota_contractual_uf") @db.Decimal(12, 4)
+  tasaInteresAnual   Decimal   @map("tasa_interes_anual") @db.Decimal(6, 4)
+  numeroCuotasTotal  Int       @map("numero_cuotas_total")
+  segurosUf          Decimal?  @map("seguros_uf") @db.Decimal(12, 4)
+  diaVencimiento     Int       @map("dia_vencimiento") @db.SmallInt
+  saldoInicialUf     Decimal?  @map("saldo_inicial_uf") @db.Decimal(12, 4)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  propiedad Propiedad @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
+
+  @@map("credito_hipotecario")
 }
 
 // Usuario único del sistema (T12 — acceso protegido). docs/data-model.md §4.1:

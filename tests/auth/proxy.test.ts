@@ -32,6 +32,19 @@ test("ruta protegida sin sesión redirige a /login", async () => {
   );
 });
 
+test("API del crédito sin sesión responde 401 JSON", async () => {
+  const id = "00000000-0000-4000-8000-000000000000";
+  for (const method of ["GET", "POST", "PUT"]) {
+    const request = new NextRequest(
+      new URL(`http://localhost:3000/api/propiedades/${id}/credito`),
+      { method }
+    );
+    const response = await (proxy as unknown as ProxyFn)(request);
+    assert.equal(response?.status, 401, method);
+    assert.deepEqual(await response?.json(), { error: "No autenticado" });
+  }
+});
+
 test("API sin sesión responde 401 JSON sin redirigir", async () => {
   const request = new NextRequest(new URL("http://localhost:3000/api/propiedades"));
   const response = await (proxy as unknown as ProxyFn)(request);

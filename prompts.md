@@ -289,7 +289,7 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 ### 6. Tickets de Trabajo
 
-*Este primer prompt refleja la interpretación inicial de que el límite de tres tickets aplicaba también al backlog detallado de docs/work-tickets.md. Esa interpretación fue corregida en el Prompt 2, que distingue el backlog técnico completo de los tres trabajos representativos que exige el README.*
+*Este primer prompt refleja la interpretación inicial de que el límite de tres tickets aplicaba también al backlog detallado de docs/work-tickets.md. Esa interpretación fue corregida en un mensaje posterior (no transcrito por el límite de tres prompts), que distingue el backlog técnico completo de los tres trabajos representativos que exige el README.*
 
 **Prompt 1:**
 
@@ -319,32 +319,6 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 **Prompt 2:**
 
-> Quiero corregir una interpretación del alcance.
->
-> El límite de 3 tickets corresponde a los tickets representativos que posteriormente mostraremos en readme.md, no necesariamente al contenido completo de docs/work-tickets.md.
->
-> docs/work-tickets.md debe representar el backlog técnico necesario para implementar el MVP de forma razonable. Puede contener más de 3 tickets si dividir el trabajo mejora su implementabilidad y trazabilidad.
->
-> Aplica la misma separación conceptual que existe con las historias de usuario: la documentación detallada puede contener más elementos y el README posteriormente seleccionará únicamente los elementos representativos exigidos por la plantilla.
->
-> Por lo tanto, replantea el plan:
->
-> * No limites docs/work-tickets.md a 3 tickets.
-> * Deriva los tickets desde product.md, user-stories.md, data-model.md y architecture.md.
-> * Evita tickets demasiado grandes que equivalgan prácticamente a una HU completa.
-> * Cada ticket debe representar una unidad de trabajo implementable y verificable.
-> * Mantén trazabilidad hacia una o más HU.
-> * Puedes incluir tickets transversales cuando correspondan a capacidades reales del MVP, como autenticación, UF o documentos, pero evita fragmentar innecesariamente la infraestructura.
-> * No inventes funcionalidades.
->
-> Para cada ticket propuesto indica: 1. título; 2. tipo principal (backend, frontend, database, full-stack o transversal); 3. objetivo; 4. HU relacionada; 5. alcance resumido; 6. dependencias.
->
-> Además, identifica cuáles 3 tickets serían buenos candidatos para mostrar posteriormente en readme.md, cumpliendo la exigencia de seleccionar uno de backend, uno de frontend y uno de base de datos. Esa selección es solo representativa y no elimina los demás tickets.
->
-> No escribas todavía docs/work-tickets.md. Muéstrame primero el nuevo plan.
-
-**Prompt 3:**
-
 *Este prompt llegó después de que yo propusiera T13 y T14 como tickets nuevos, aislados por capa, para resolver la exigencia del README — propuesta que este mensaje rechaza explícitamente.*
 
 > Hay una contradicción en la propuesta T13/T14.
@@ -372,11 +346,35 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 **Prompt 3:**
 
-*Implementación posterior del ticket T01 (Gestión de propiedades) con OpenSpec: fragmento del mensaje que aprobó el plan y fijó las precisiones de autenticación, pruebas de integración y validaciones.*
+*Implementación posterior, con OpenSpec, de T01 (Gestión de propiedades) y T03 (Registro mensual de dividendo y saldo del crédito, cuya capa de base de datos ilustra el «Ticket 3» del README): fragmentos de los mensajes que aprobaron cada plan y fijaron sus precisiones. Los criterios de T03 se verificaron con pruebas unitarias, pruebas de integración contra una BD de pruebas aislada y una verificación manual en la interfaz.*
+
+**T01 — precisiones de autenticación, pruebas de integración y validaciones:**
 
 > 1. Autenticación: las rutas /api/* sin sesión deben responder 401 JSON. Las páginas protegidas deben seguir redirigiendo a /login. No alterar /api/auth/*. Mantener requireSession() en los Route Handlers.
 > 2. Pruebas de integración: no modificar ni eliminar las 3 propiedades existentes. No ejecutar TRUNCATE ni el seed completo. Las pruebas deben crear y limpiar exclusivamente sus propios registros. Preferir una BD de pruebas aislada si resulta sencillo.
 > 3. Validaciones: utilizar Zod con reglas específicas para Propiedad. Validar fechas calendario reales, no solo YYYY-MM-DD. Respetar los tipos y restricciones de Prisma/PostgreSQL. Evitar abstracciones genéricas innecesarias.
+
+**T03 — ajustes al plan (fecha de pago, último saldo y seguridad de pruebas):**
+
+> 1. Fecha de pago:
+>    - Si existe dividendo_pagado_clp, fecha_pago_dividendo es obligatoria.
+>    - Si dividendo_pagado_clp es null, fecha_pago_dividendo también debe ser null.
+>    - Reflejar esta regla en validaciones, especificaciones y restricciones de base de datos.
+>
+> 2. Último saldo:
+>    - Utilizar el registro con el período máximo que tenga saldo_pendiente_uf no nulo.
+>    - Mostrarlo como "Último saldo registrado", nunca como "Saldo actual".
+>    - Mostrar siempre el período correspondiente.
+>    - No calcular ni proyectar saldos.
+>
+> 3. Seguridad de pruebas:
+>    - Antes de cualquier escritura de integración, comprobar que TEST_DATABASE_URL apunta a una base diferente de DATABASE_URL y DIRECT_URL.
+>    - Si no puede verificarse el aislamiento, detener las pruebas.
+>    - No modificar credenciales, usuarios, configuraciones ni bases de datos para intentar resolver errores.
+
+**T03 — refuerzo posterior del helper de aislamiento:**
+
+> Compara las conexiones mediante sus componentes: host, puerto, nombre de base de datos y schema de PostgreSQL. No utilices las contraseñas para determinar si dos conexiones apuntan a la misma base. Si una URL es inválida o no se puede comprobar el aislamiento, omite las pruebas de integración. Mantén la posibilidad de utilizar el mismo usuario PostgreSQL para dos bases diferentes.
 
 ---
 

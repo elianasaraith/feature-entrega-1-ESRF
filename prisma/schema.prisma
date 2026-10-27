@@ -57,9 +57,31 @@ model CreditoHipotecario {
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  propiedad Propiedad @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
+  propiedad Propiedad                  @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
+  registros CreditoRegistroMensual[]
 
   @@map("credito_hipotecario")
+}
+
+// Serie mensual del crédito (T03). docs/data-model.md §4.4. `periodo` es la
+// mensualidad (día 1); `fechaPagoDividendo` es la fecha de caja. Los CHECK
+// (periodo día 1, dividendo > 0, saldo >= 0, al menos un dato, y fecha de pago
+// nula si y solo si no hay dividendo) viven en la migración SQL.
+model CreditoRegistroMensual {
+  id                 String    @id @default(uuid()) @db.Uuid
+  creditoId          String    @map("credito_id") @db.Uuid
+  periodo            DateTime  @db.Date
+  dividendoPagadoClp Decimal?  @map("dividendo_pagado_clp") @db.Decimal(14, 0)
+  fechaPagoDividendo DateTime? @map("fecha_pago_dividendo") @db.Date
+  saldoPendienteUf   Decimal?  @map("saldo_pendiente_uf") @db.Decimal(12, 4)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  credito CreditoHipotecario @relation(fields: [creditoId], references: [id], onDelete: Restrict)
+
+  @@unique([creditoId, periodo])
+  @@index([fechaPagoDividendo])
+  @@map("credito_registro_mensual")
 }
 
 // Usuario único del sistema (T12 — acceso protegido). docs/data-model.md §4.1:

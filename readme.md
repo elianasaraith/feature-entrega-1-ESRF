@@ -381,7 +381,7 @@ erDiagram
         uuid credito_id FK "NOT NULL"
         date periodo "NOT NULL - mensualidad hipotecaria"
         numeric dividendo_pagado_clp "NULL - 14,0"
-        date fecha_pago_dividendo "NULL - fecha de caja"
+        date fecha_pago_dividendo "NULL - fecha de caja; presente si y solo si hay dividendo"
         numeric saldo_pendiente_uf "NULL - 12,4"
         timestamptz created_at "NOT NULL"
         timestamptz updated_at "NOT NULL"
@@ -517,7 +517,7 @@ consultada por período.
 | `usuario` | Credenciales del único usuario del sistema | PK `id`; `email` UNIQUE | Sin `usuario_id` en el resto del modelo: el MVP es de usuario único |
 | `propiedad` | Unidad de la cartera; raíz de la que cuelga todo lo demás | PK `id` | `valor_compra_monto NUMERIC(14,4)` con `valor_compra_moneda` explícita (UF o CLP) |
 | `credito_hipotecario` | Condiciones contractuales del crédito de una propiedad | PK `id`; FK `propiedad_id` | `UNIQUE(propiedad_id)` — como máximo un crédito por propiedad |
-| `credito_registro_mensual` | Serie mensual del dividendo pagado y el saldo informado por el banco | PK `id`; FK `credito_id` | `UNIQUE(credito_id, periodo)`; dos `CHECK` — no ambos datos nulos; dividendo exige `fecha_pago_dividendo` |
+| `credito_registro_mensual` | Serie mensual del dividendo pagado y el saldo informado por el banco | PK `id`; FK `credito_id` | `UNIQUE(credito_id, periodo)`; dos `CHECK` — no ambos datos nulos; `fecha_pago_dividendo` presente si y solo si hay dividendo |
 | `arrendatario` | Persona que arrienda, reutilizable entre contratos sucesivos | PK `id`; `rut` UNIQUE nulable | — |
 | `contrato_arriendo` | Contrato de arriendo de una propiedad, con su vigencia y garantía | PK `id`; FK `propiedad_id`, `arrendatario_id` | Sin columna `estado`: la vigencia se deriva de `fecha_inicio`/`fecha_termino` |
 | `contrato_monto` | Histórico de los montos aplicados a lo largo de un contrato | PK `id`; FK `contrato_id` | `UNIQUE(contrato_id, vigente_desde_periodo)`; el monto inicial es su primera fila, no una columna del contrato |
@@ -952,7 +952,8 @@ período siguen siendo propiedad de T03.
   NUMERIC(12,4)` nulable, `created_at`/`updated_at`.
 - `UNIQUE (credito_id, periodo)`.
 - `CHECK (dividendo_pagado_clp IS NOT NULL OR saldo_pendiente_uf IS NOT NULL)`.
-- `CHECK (dividendo_pagado_clp IS NULL OR fecha_pago_dividendo IS NOT NULL)`.
+- `CHECK ((dividendo_pagado_clp IS NULL) = (fecha_pago_dividendo IS NULL))`: la fecha
+  de pago existe si y solo si hay dividendo.
 - Índice para la consulta por mes de caja: `(fecha_pago_dividendo)`.
 
 **Criterios de aceptación** (derivados de las restricciones de
@@ -960,7 +961,7 @@ período siguen siendo propiedad de T03.
 | # | Regla | Resultado esperado |
 |---|---|---|
 | AC1 | Ambos campos de hecho nulos | El `CHECK` rechaza la fila |
-| AC2 | Dividendo sin `fecha_pago_dividendo` | El `CHECK` rechaza la fila |
+| AC2 | Dividendo sin `fecha_pago_dividendo`, o fecha sin dividendo | El `CHECK` rechaza la fila |
 | AC3 | Mismo `credito_id` y `periodo` dos veces | `UNIQUE` rechaza el segundo registro |
 | AC4 | Fila válida, con uno o ambos datos presentes | Se acepta |
 

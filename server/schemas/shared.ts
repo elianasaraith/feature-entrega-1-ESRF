@@ -42,6 +42,28 @@ export function nonNegativeDecimal(maxIntDigits: number, maxDecimals: number) {
   return decimal(maxIntDigits, maxDecimals, true);
 }
 
+// Entero CLP > 0 como texto, sin decimales ni signo (NUMERIC(maxDigits, 0)).
+export function positiveIntegerText(maxDigits: number) {
+  return z
+    .union([z.number(), z.string()])
+    .transform((v) => String(v).trim())
+    .pipe(
+      z
+        .string()
+        .regex(/^\d+$/, { error: "Debe ser un entero sin decimales", abort: true })
+        .refine((v) => /[1-9]/.test(v), { error: "Debe ser mayor que 0", abort: true })
+        .refine(
+          (v) => v.replace(/^0+(?=\d)/, "").length <= maxDigits,
+          "Excede el rango permitido"
+        )
+    );
+}
+
+// Mes calendario `YYYY-MM` (mes 01–12).
+export const yearMonth = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Debe tener formato YYYY-MM con un mes válido");
+
 // Fecha calendario real: "2026-02-30" cumple el formato pero no existe.
 export function isRealCalendarDate(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);

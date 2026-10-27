@@ -2,6 +2,10 @@ import { Prisma } from "@prisma/client";
 import type { CreditoHipotecario, PrismaClient } from "@prisma/client";
 import { ConflictError, NotFoundError } from "@/server/errors";
 import type { CreditoInput } from "@/server/schemas/credito";
+import {
+  SIN_CREDITO,
+  asegurarPropiedad as verificarPropiedad,
+} from "./propiedad-lookup";
 
 export type CreditoDto = {
   id: string;
@@ -20,10 +24,6 @@ export type CreditoDto = {
   updatedAt: string;
 };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const SIN_PROPIEDAD = "Propiedad no encontrada";
-const SIN_CREDITO = "La propiedad no tiene crédito hipotecario";
 
 // Decimal → texto: nunca pasa por Number.
 function toDto(c: CreditoHipotecario): CreditoDto {
@@ -61,14 +61,7 @@ function isKnownError(error: unknown, code: string): boolean {
 // El cliente Prisma se inyecta para poder probar contra una BD de pruebas
 // independiente sin tocar la de desarrollo.
 export function createCreditoService(prisma: PrismaClient) {
-  async function asegurarPropiedad(propiedadId: string): Promise<void> {
-    if (!UUID.test(propiedadId)) throw new NotFoundError(SIN_PROPIEDAD);
-    const propiedad = await prisma.propiedad.findUnique({
-      where: { id: propiedadId },
-      select: { id: true },
-    });
-    if (!propiedad) throw new NotFoundError(SIN_PROPIEDAD);
-  }
+  const asegurarPropiedad = (propiedadId: string) => verificarPropiedad(prisma, propiedadId);
 
   async function obtenerPorPropiedad(propiedadId: string): Promise<CreditoDto> {
     await asegurarPropiedad(propiedadId);

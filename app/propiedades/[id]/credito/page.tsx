@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NotFoundError } from "@/server/errors";
-import { creditoService, propiedadService } from "@/server/services";
+import { creditoRegistroService, creditoService, propiedadService } from "@/server/services";
 import type { CreditoDto } from "@/server/services/credito-service";
 
 export default function CreditoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -54,6 +54,9 @@ async function DetalleCredito({ params }: { params: Promise<{ id: string }> }) {
     );
   }
 
+  // Registro de período máximo con saldo; no es un saldo calculado ni «actual».
+  const ultimoSaldo = await creditoRegistroService.ultimoSaldoRegistrado(id);
+
   const filas: [string, string][] = [
     ["Banco", credito.banco],
     ["Cuota contractual", `${credito.cuotaContractualUf} UF · CLP: ${CLP_NO_DISPONIBLE}`],
@@ -62,6 +65,12 @@ async function DetalleCredito({ params }: { params: Promise<{ id: string }> }) {
       credito.saldoInicialUf
         ? `${credito.saldoInicialUf} UF · CLP: ${CLP_NO_DISPONIBLE}`
         : "—",
+    ],
+    [
+      "Último saldo registrado",
+      ultimoSaldo
+        ? `${ultimoSaldo.saldoPendienteUf} UF (período ${ultimoSaldo.periodo}) · CLP: ${CLP_NO_DISPONIBLE}`
+        : "No registrado",
     ],
     ["Tasa de interés anual", `${credito.tasaInteresAnual} %`],
     ["Número total de cuotas", String(credito.numeroCuotasTotal)],
@@ -92,6 +101,14 @@ async function DetalleCredito({ params }: { params: Promise<{ id: string }> }) {
           </div>
         ))}
       </dl>
+      <p className="mt-4 text-sm">
+        <Link
+          href={`/propiedades/${propiedad.id}/credito/registro-mensual`}
+          className="underline"
+        >
+          Registro mensual de dividendo y saldo
+        </Link>
+      </p>
     </>
   );
 }

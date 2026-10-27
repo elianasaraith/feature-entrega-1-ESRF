@@ -174,7 +174,7 @@ registro.
 **Alcance.**
 - Alta de una fila en `credito_registro_mensual` por mensualidad, con saldo, dividendo o
   ambos — nunca ambos ausentes.
-- Si hay dividendo, `fecha_pago_dividendo` es obligatoria.
+- Si hay dividendo, `fecha_pago_dividendo` es obligatoria; si no lo hay, debe ser nula.
 - Consulta del histórico por período, incluidos meses anteriores.
 
 **Criterios de aceptación** (de `user-stories.md`, HU01):
@@ -204,7 +204,7 @@ ticket solo la registra).
 
 **Estrategia de pruebas:**
 - Integración de servicios: los `CHECK` rechazan una fila con saldo y dividendo ambos
-  nulos, y un dividendo sin `fecha_pago_dividendo`.
+  nulos, un dividendo sin `fecha_pago_dividendo` y una fecha sin dividendo.
 - Integración: consulta de un mes con fila y de un mes sin fila (AC3) devuelven resultados
   correctos y distintos.
 - API: 201 en alta válida, 400 al violar un `CHECK`.

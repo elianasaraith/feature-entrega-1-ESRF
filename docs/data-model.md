@@ -129,7 +129,7 @@ erDiagram
         uuid credito_id FK "NOT NULL"
         date periodo "NOT NULL - mensualidad hipotecaria"
         numeric dividendo_pagado_clp "NULL - 14,0"
-        date fecha_pago_dividendo "NULL - fecha de caja"
+        date fecha_pago_dividendo "NULL - fecha de caja; presente si y solo si hay dividendo"
         numeric saldo_pendiente_uf "NULL - 12,4"
         timestamptz created_at "NOT NULL"
         timestamptz updated_at "NOT NULL"
@@ -341,7 +341,7 @@ del banco. **Es lo que hace consultable el saldo de un mes anterior.**
 | `credito_id` | `UUID` | No | FK → `credito_hipotecario` | |
 | `periodo` | `DATE` | No | día 1 del mes | **Mensualidad hipotecaria** a la que corresponde el registro |
 | `dividendo_pagado_clp` | `NUMERIC(14,0)` | Sí | `> 0` | **En CLP**: el desembolso real constatado en la cartola |
-| `fecha_pago_dividendo` | `DATE` | Sí | | **Fecha de caja**: cuándo ocurrió la salida efectiva de dinero |
+| `fecha_pago_dividendo` | `DATE` | Sí | Obligatoria si hay dividendo; nula si no lo hay | **Fecha de caja**: cuándo ocurrió la salida efectiva de dinero |
 | `saldo_pendiente_uf` | `NUMERIC(12,4)` | Sí | `>= 0` | **En UF**: saldo informado por el banco. Puede llegar a cero al liquidarse |
 | `created_at`, `updated_at` | `TIMESTAMPTZ` | No | | |
 
@@ -351,7 +351,7 @@ del banco. **Es lo que hace consultable el saldo de un mes anterior.**
 |---|---|
 | `UNIQUE (credito_id, periodo)` | Un registro por crédito y mensualidad |
 | `CHECK (dividendo_pagado_clp IS NOT NULL OR saldo_pendiente_uf IS NOT NULL)` | Se admite saldo, dividendo o ambos, pero **nunca una fila con ambos nulos**: no registraría ningún hecho |
-| `CHECK (dividendo_pagado_clp IS NULL OR fecha_pago_dividendo IS NOT NULL)` | La fecha determina la imputación al flujo de caja; sin ella el dividendo no pertenecería a ningún mes |
+| `CHECK ((dividendo_pagado_clp IS NULL) = (fecha_pago_dividendo IS NULL))` | La fecha existe **si y solo si** hay dividendo: la fecha determina la imputación al flujo de caja, de modo que sin ella el dividendo no pertenecería a ningún mes, y sin dividendo no hay salida de caja que fechar |
 
 **`periodo` y `fecha_pago_dividendo` son datos funcionales distintos, y ninguno sustituye
 al otro.** `periodo` identifica la mensualidad hipotecaria; `fecha_pago_dividendo`

@@ -45,6 +45,22 @@ test("API del crédito sin sesión responde 401 JSON", async () => {
   }
 });
 
+test("API del registro mensual sin sesión responde 401 JSON", async () => {
+  const id = "00000000-0000-4000-8000-000000000000";
+  const casos: [string, string[]][] = [
+    [`/api/propiedades/${id}/credito/registro-mensual`, ["GET", "POST"]],
+    [`/api/propiedades/${id}/credito/registro-mensual/2026-03`, ["GET", "PUT"]],
+  ];
+  for (const [ruta, metodos] of casos) {
+    for (const method of metodos) {
+      const request = new NextRequest(new URL(`http://localhost:3000${ruta}`), { method });
+      const response = await (proxy as unknown as ProxyFn)(request);
+      assert.equal(response?.status, 401, `${method} ${ruta}`);
+      assert.deepEqual(await response?.json(), { error: "No autenticado" });
+    }
+  }
+});
+
 test("API sin sesión responde 401 JSON sin redirigir", async () => {
   const request = new NextRequest(new URL("http://localhost:3000/api/propiedades"));
   const response = await (proxy as unknown as ProxyFn)(request);

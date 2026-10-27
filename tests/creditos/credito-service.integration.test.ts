@@ -6,18 +6,13 @@ import { createPropiedadService } from "../../server/services/propiedad-service"
 import { ConflictError, NotFoundError } from "../../server/errors";
 import { creditoInputSchema } from "../../server/schemas/credito";
 import { propiedadInputSchema } from "../../server/schemas/propiedad";
+import { resolveTestDatabase } from "../setup/test-db";
 
 // Integración contra PostgreSQL real. Exige TEST_DATABASE_URL explícita y
 // distinta de la BD de desarrollo; sin ella, las pruebas se omiten. Nunca usa
 // DATABASE_URL como alternativa. Cada prueba borra únicamente las filas que
 // ella misma creó (crédito antes que propiedad, por la FK Restrict).
-const testUrl = process.env.TEST_DATABASE_URL;
-const devUrls = [process.env.DATABASE_URL, process.env.DIRECT_URL].filter(Boolean);
-const skip = !testUrl
-  ? "TEST_DATABASE_URL no definida"
-  : devUrls.includes(testUrl)
-    ? "TEST_DATABASE_URL apunta a la BD de desarrollo"
-    : false;
+const { url: testUrl, skip } = resolveTestDatabase();
 
 const prisma = skip
   ? (null as unknown as PrismaClient)

@@ -434,6 +434,12 @@ desde un período.
 
 `UNIQUE (contrato_id, vigente_desde_periodo)`. Todo contrato tiene **al menos una fila**.
 
+> **Excepción temporal (propuesta a validar).** En T04 el monto inicial es **opcional** en el
+> alta: un contrato creado sin monto no tiene fila en esta tabla hasta T05. La invariante
+> «al menos una fila» queda **relajada hasta T05**, que deberá tratar contratos sin monto
+> (por ejemplo, exigiéndolo antes de generar pagos esperados). T04 solo crea la fila inicial;
+> no la modifica al editar el contrato ni agrega reajustes.
+
 **El monto inicial es la primera fila, no una columna del contrato.** Esta es la decisión
 central de la entidad: hay una única fuente de verdad para el monto, y un reajuste deja de
 ser un caso especial —es simplemente otra fila—. El contrato conserva su identidad, su
@@ -667,7 +673,9 @@ Se validan en la capa de aplicación y se comprueban con tests:
 3. **`monto_esperado_clp` coincide con el monto que `contrato_monto` da para su período.**
    Se restablece tras cada recálculo por reajuste.
 4. **El primer `contrato_monto` de un contrato tiene `vigente_desde_periodo` igual al mes
-   de `fecha_inicio`**, y ninguna fila tiene vigencia anterior al inicio del contrato.
+   de `fecha_inicio`**, y ninguna fila tiene vigencia anterior al inicio del contrato. Mientras
+   exista esa fila, T04 rechaza (409) editar el mes de `fecha_inicio`, para no desalinearla
+   sin sobrescribir el monto.
 5. **`pago_esperado.periodo` cae dentro de la vigencia de su contrato.**
 
 ### 5.2 Índices previstos

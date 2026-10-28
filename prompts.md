@@ -376,6 +376,10 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 > Compara las conexiones mediante sus componentes: host, puerto, nombre de base de datos y schema de PostgreSQL. No utilices las contraseñas para determinar si dos conexiones apuntan a la misma base. Si una URL es inválida o no se puede comprobar el aislamiento, omite las pruebas de integración. Mantén la posibilidad de utilizar el mismo usuario PostgreSQL para dos bases diferentes.
 
+**T04 — gestión de contratos de arriendo (apply de `implement-lease-management`):**
+
+> Implementa el cambio OpenSpec implement-lease-management siguiendo los artefactos aprobados. Mantén el modelo de usuario único (sin usuario_id) y exige sesión y existencia del arrendatario. Rechaza con 409 los cambios de mes de fechaInicio cuando el contrato ya tenga monto inicial. Mantén pg_advisory_xact_lock para las operaciones concurrentes. No implementes T05 ni T06. Puedes generar los archivos de migración, pero antes de aplicar cualquiera verifica y muestra host, puerto y nombre de la base de destino sin credenciales; aplícala solo a realtytrack_test y nunca a realtytrack ni a producción sin mi autorización. No modifiques .env ni hagas commit ni push.
+
 ---
 
 ### 7. Pull Requests

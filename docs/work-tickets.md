@@ -237,7 +237,10 @@ garantía es información contractual, no un ingreso recurrente (`product.md` §
 | AC3 | E17 — La garantía no es ingreso del mes | La garantía consta como información contractual y no figura entre los ingresos del mes |
 
 **Entidades involucradas:** `arrendatario`, `contrato_arriendo` (`data-model.md` §4.5,
-§4.6). El monto inicial vive en `contrato_monto` — alcance de T05, no de este ticket.
+§4.6) y, solo para el **monto inicial opcional**, la primera fila de `contrato_monto`
+(§4.7). Si el alta informa el monto, T04 crea esa fila en la misma transacción; si no, el
+contrato queda sin fila y la invariante «al menos una fila» se relaja hasta T05
+(*propuesta a validar*). Reajustes, nuevas filas y el cálculo del monto vigente son T05.
 
 **Componentes y capas arquitectónicas:**
 - UI: `app/contratos/` (`architecture.md` §7).
@@ -275,8 +278,19 @@ esperado se genera desde el contrato vigente, con el monto que regía en ese per
 `UNIQUE(contrato_id, periodo)`, sin cron ni generación desde la UI (`architecture.md`
 §5.4).
 
+**Relación con T04 (*propuesta a validar*).** T04 permite crear contratos **sin monto
+mensual inicial**: un contrato puede existir sin ninguna fila en `contrato_monto`, y la
+invariante «todo contrato tiene al menos una fila» (`data-model.md` §4.7) queda relajada
+hasta este ticket. T04 solo crea la fila inicial cuando el alta informa el monto, y nunca la
+modifica al editar el contrato.
+
 **Alcance.**
 - Alta de `contrato_monto` (monto inicial y reajustes), con vigencia en período mensual.
+  - Si el contrato **no tiene ninguna fila** (creado en T04 sin monto), el alta registra el
+    **primer monto**, con `vigente_desde_periodo` igual al mes de `fecha_inicio`
+    (`data-model.md` §5.1, regla 4).
+  - Los reajustes posteriores **agregan filas nuevas**; nunca sobrescriben ni eliminan filas
+    anteriores del histórico.
 - Generación de `pago_esperado` para los períodos del contrato vigente, con el monto y la
   fecha esperada correspondientes.
 - Recálculo explícito de `monto_esperado_clp` en los `pago_esperado` afectados por un

@@ -32,7 +32,8 @@ model Propiedad {
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  credito CreditoHipotecario?
+  credito   CreditoHipotecario?
+  contratos ContratoArriendo[]
 
   @@map("propiedad")
 }
@@ -94,4 +95,64 @@ model Usuario {
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("usuario")
+}
+
+// Persona que arrienda (T04). docs/data-model.md §4.5. Reutilizable entre
+// contratos sucesivos. Sin usuario_id: MVP de usuario único (§4.1).
+model Arrendatario {
+  id        String   @id @default(uuid()) @db.Uuid
+  nombre    String
+  rut       String?  @unique
+  email     String?
+  telefono  String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  contratos ContratoArriendo[]
+
+  @@map("arrendatario")
+}
+
+// Contrato de arriendo (T04). docs/data-model.md §4.6. Sin columna de monto ni
+// de estado: el monto vive en `contrato_monto` y la vigencia se deriva de las
+// fechas. Los CHECK (término >= inicio, garantía >= 0, día 1..31) viven en la
+// migración SQL. El no solape entre contratos de una propiedad es validación
+// de aplicación (con bloqueo por propiedad), no restricción de base de datos.
+model ContratoArriendo {
+  id              String   @id @default(uuid()) @db.Uuid
+  propiedadId     String   @map("propiedad_id") @db.Uuid
+  arrendatarioId  String   @map("arrendatario_id") @db.Uuid
+  fechaInicio     DateTime @map("fecha_inicio") @db.Date
+  fechaTermino    DateTime @map("fecha_termino") @db.Date
+  garantiaClp     Decimal? @map("garantia_clp") @db.Decimal(14, 0)
+  diaEsperadoPago Int      @map("dia_esperado_pago") @db.SmallInt
+  observaciones   String?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  propiedad    Propiedad       @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
+  arrendatario Arrendatario    @relation(fields: [arrendatarioId], references: [id], onDelete: Restrict)
+  montos       ContratoMonto[]
+
+  @@index([propiedadId, fechaInicio])
+  @@index([arrendatarioId])
+  @@map("contrato_arriendo")
+}
+
+// Histórico de montos de un contrato (docs/data-model.md §4.7). En T04 solo se
+// crea la fila inicial; reajustes y nuevas filas son T05. `vigente_desde_periodo`
+// es el día 1 del mes (CHECK en la migración).
+model ContratoMonto {
+  id                  String   @id @default(uuid()) @db.Uuid
+  contratoId          String   @map("contrato_id") @db.Uuid
+  montoMensualClp     Decimal  @map("monto_mensual_clp") @db.Decimal(14, 0)
+  vigenteDesdePeriodo DateTime @map("vigente_desde_periodo") @db.Date
+  motivo              String?
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  contrato ContratoArriendo @relation(fields: [contratoId], references: [id], onDelete: Restrict)
+
+  @@unique([contratoId, vigenteDesdePeriodo])
+  @@map("contrato_monto")
 }

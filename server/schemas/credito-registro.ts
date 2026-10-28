@@ -3,18 +3,13 @@ import {
   isRealCalendarDate,
   nonNegativeDecimal,
   positiveIntegerText,
+  vacioANull,
   yearMonth,
 } from "./shared";
 
 // Espejo de docs/data-model.md §4.4 y de los CHECK de la migración. Sin reglas
 // cruzadas que el modelo no define (fecha de pago vs período, saldo vs saldo
 // inicial, límite de períodos futuros).
-
-const vacioANull = <T extends z.ZodType>(schema: T) =>
-  z
-    .union([z.null(), z.literal("").transform(() => null), schema])
-    .optional()
-    .transform((v) => v ?? null);
 
 const camposRegistro = {
   // NUMERIC(14,0): CLP entero.

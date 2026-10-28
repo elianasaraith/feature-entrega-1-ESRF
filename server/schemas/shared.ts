@@ -59,6 +59,22 @@ export function positiveIntegerText(maxDigits: number) {
     );
 }
 
+// Entero CLP >= 0 como texto, sin decimales ni signo (NUMERIC(maxDigits, 0)).
+export function nonNegativeIntegerText(maxDigits: number) {
+  return z
+    .union([z.number(), z.string()])
+    .transform((v) => String(v).trim())
+    .pipe(
+      z
+        .string()
+        .regex(/^\d+$/, { error: "Debe ser un entero sin decimales", abort: true })
+        .refine(
+          (v) => v.replace(/^0+(?=\d)/, "").length <= maxDigits,
+          "Excede el rango permitido"
+        )
+    );
+}
+
 // Mes calendario `YYYY-MM` (mes 01–12).
 export const yearMonth = z
   .string()
@@ -85,3 +101,10 @@ export const optionalText = z
     const trimmed = v?.trim();
     return trimmed ? trimmed : null;
   });
+
+// Campo opcional que acepta null, "" o el valor: vacío → null.
+export const vacioANull = <T extends z.ZodType>(schema: T) =>
+  z
+    .union([z.null(), z.literal("").transform(() => null), schema])
+    .optional()
+    .transform((v) => v ?? null);

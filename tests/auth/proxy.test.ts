@@ -67,6 +67,8 @@ test("API de contratos y arrendatarios sin sesión responde 401 JSON", async () 
     ["/api/arrendatarios", ["GET", "POST"]],
     [`/api/propiedades/${id}/contratos`, ["GET", "POST"]],
     [`/api/propiedades/${id}/contratos/${id}`, ["GET", "PUT"]],
+    [`/api/propiedades/${id}/contratos/${id}/montos`, ["GET", "POST"]],
+    [`/api/propiedades/${id}/contratos/${id}/pagos-esperados/sincronizar`, ["POST"]],
   ];
   for (const [ruta, metodos] of casos) {
     for (const method of metodos) {

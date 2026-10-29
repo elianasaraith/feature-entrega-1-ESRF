@@ -1,9 +1,16 @@
 import type { ContratoArriendo, ContratoMonto, Prisma, PrismaClient, Arrendatario } from "@prisma/client";
-import { ConflictError, NotFoundError } from "@/server/errors";
+import { ConflictError, NotFoundError, UnprocessableError } from "@/server/errors";
+import {
+  fechaEsperada,
+  montoVigenteEn,
+  periodoDe,
+  periodosEntre,
+} from "@/server/domain/contrato-monto";
 import { type Vigencia, vigenciaDe } from "@/server/domain/contrato-vigencia";
 import type {
   ContratoActualizarInput,
   ContratoCrearInput,
+  MontoCrearInput,
 } from "@/server/schemas/contrato";
 import {
   type ArrendatarioDto,
@@ -24,13 +31,26 @@ export type ContratoDto = {
   garantiaClp: string | null;
   diaEsperadoPago: number;
   observaciones: string | null;
-  // Fila inicial de contrato_monto (T04) o null si el contrato no la tiene.
-  // No es un «monto vigente»: ese cálculo es de T05.
+  // Primera fila de contrato_monto o null si el contrato aún no tiene monto.
+  // El monto vigente de un período sale de listarMontos.
   montoInicialClp: string | null;
   vigencia: Vigencia;
   createdAt: string;
   updatedAt: string;
 };
+
+export type MontoDto = {
+  id: string;
+  montoMensualClp: string;
+  // Día 1 del primer mes en que rige (YYYY-MM-01).
+  vigenteDesdePeriodo: string;
+  motivo: string | null;
+  createdAt: string;
+};
+
+export type MontosDto = { montos: MontoDto[]; montoVigenteClp: string | null };
+
+export type SincronizacionDto = { creados: number; existentes: number };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIN_CONTRATO = "Contrato no encontrado";
@@ -49,6 +69,16 @@ const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const fechaADate = (fecha: string) => new Date(`${fecha}T00:00:00.000Z`);
 // Mes de una fecha YYYY-MM-DD como día 1 (periodo de contrato_monto).
 const primerDiaDelMes = (fecha: string) => new Date(`${fecha.slice(0, 7)}-01T00:00:00.000Z`);
+
+function toMontoDto(m: ContratoMonto): MontoDto {
+  return {
+    id: m.id,
+    montoMensualClp: m.montoMensualClp.toString(),
+    vigenteDesdePeriodo: isoDate(m.vigenteDesdePeriodo),
+    motivo: m.motivo,
+    createdAt: m.createdAt.toISOString(),
+  };
+}
 
 // Decimal → texto: nunca pasa por Number.
 function toDto(c: ContratoConRelaciones, referencia: string): ContratoDto {
@@ -219,6 +249,24 @@ export function createContratoService(prisma: PrismaClient) {
 
         await verificarSinSolape(tx, propiedadId, input.fechaInicio, input.fechaTermino, contratoId);
 
+        // Ningún monto ni pago esperado puede quedar posterior al mes de término
+        // (data-model §5.1, reglas 4 y 5).
+        const terminoNuevo = periodoDe(input.fechaTermino);
+        const [ultimoMonto, ultimoPago] = await Promise.all([
+          tx.contratoMonto.aggregate({
+            where: { contratoId },
+            _max: { vigenteDesdePeriodo: true },
+          }),
+          tx.pagoEsperado.aggregate({ where: { contratoId }, _max: { periodo: true } }),
+        ]);
+        const maxMonto = ultimoMonto._max.vigenteDesdePeriodo;
+        const maxPago = ultimoPago._max.periodo;
+        if ((maxMonto && isoDate(maxMonto) > terminoNuevo) || (maxPago && isoDate(maxPago) > terminoNuevo)) {
+          throw new ConflictError(
+            "La fecha de término deja fuera de vigencia montos o pagos esperados ya registrados"
+          );
+        }
+
         await tx.contratoArriendo.update({
           where: { id: contratoId },
           data: {
@@ -231,6 +279,122 @@ export function createContratoService(prisma: PrismaClient) {
           },
         });
         return toDto(await obtenerFila(tx, propiedadId, contratoId), referencia);
+      });
+    },
+
+    // Historial de montos (por vigencia) y monto vigente en el mes de la
+    // referencia. Solo lectura.
+    async listarMontos(
+      propiedadId: string,
+      contratoId: string,
+      referencia: string
+    ): Promise<MontosDto> {
+      await asegurarPropiedad(prisma, propiedadId);
+      await obtenerFila(prisma, propiedadId, contratoId);
+      const filas = await prisma.contratoMonto.findMany({
+        where: { contratoId },
+        orderBy: { vigenteDesdePeriodo: "asc" },
+      });
+      const montos = filas.map(toMontoDto);
+      return { montos, montoVigenteClp: montoVigenteEn(montos, periodoDe(referencia)) };
+    },
+
+    // Primer monto o reajuste: agrega una fila y nunca altera las anteriores.
+    // Los pagos esperados ya existentes desde ese período se actualizan al monto
+    // que les corresponde; no se crea ninguno (eso es sincronizarPagos).
+    async registrarMonto(
+      propiedadId: string,
+      contratoId: string,
+      input: MontoCrearInput
+    ): Promise<MontoDto> {
+      await asegurarPropiedad(prisma, propiedadId);
+      return conBloqueoDePropiedad(propiedadId, async (tx) => {
+        const contrato = await obtenerFila(tx, propiedadId, contratoId);
+        const inicio = periodoDe(isoDate(contrato.fechaInicio));
+        const termino = periodoDe(isoDate(contrato.fechaTermino));
+        const periodo = input.vigenteDesdePeriodo;
+        const previas = await tx.contratoMonto.findMany({ where: { contratoId } });
+
+        if (previas.length === 0) {
+          if (periodo !== inicio) {
+            throw new UnprocessableError("El primer monto debe regir desde el mes de inicio del contrato");
+          }
+        } else {
+          if (periodo < inicio || periodo > termino) {
+            throw new UnprocessableError("El período debe estar dentro de la vigencia del contrato");
+          }
+          if (previas.some((f) => isoDate(f.vigenteDesdePeriodo) === periodo)) {
+            throw new ConflictError("Ya existe un monto registrado para ese período");
+          }
+        }
+
+        const creada = await tx.contratoMonto.create({
+          data: {
+            contratoId,
+            montoMensualClp: input.montoMensualClp,
+            vigenteDesdePeriodo: fechaADate(periodo),
+            motivo: input.motivo ?? (previas.length === 0 ? "monto inicial" : "reajuste"),
+          },
+        });
+
+        const filas = [...previas, creada].map(toMontoDto);
+        const pagos = await tx.pagoEsperado.findMany({
+          where: { contratoId, periodo: { gte: fechaADate(periodo) } },
+        });
+        for (const pago of pagos) {
+          const monto = montoVigenteEn(filas, isoDate(pago.periodo));
+          // Solo se toca (y cambia updated_at) si el monto realmente cambia.
+          if (monto !== null && monto !== pago.montoEsperadoClp.toString()) {
+            await tx.pagoEsperado.update({
+              where: { id: pago.id },
+              data: { montoEsperadoClp: monto },
+            });
+          }
+        }
+        return toMontoDto(creada);
+      });
+    },
+
+    // Crea los pagos esperados que faltan, desde el mes de inicio hasta el menor
+    // entre el mes de la referencia y el de término. Idempotente; nunca modifica
+    // ni borra pagos existentes. Sin monto registrado no crea nada.
+    async sincronizarPagos(
+      propiedadId: string,
+      contratoId: string,
+      referencia: string
+    ): Promise<SincronizacionDto> {
+      await asegurarPropiedad(prisma, propiedadId);
+      return conBloqueoDePropiedad(propiedadId, async (tx) => {
+        const contrato = await obtenerFila(tx, propiedadId, contratoId);
+        const [montos, pagos] = await Promise.all([
+          tx.contratoMonto.findMany({ where: { contratoId } }),
+          tx.pagoEsperado.findMany({ where: { contratoId }, select: { periodo: true } }),
+        ]);
+        if (montos.length === 0) return { creados: 0, existentes: pagos.length };
+
+        const filas = montos.map(toMontoDto);
+        const inicio = periodoDe(isoDate(contrato.fechaInicio));
+        const termino = periodoDe(isoDate(contrato.fechaTermino));
+        const hasta = periodoDe(referencia) < termino ? periodoDe(referencia) : termino;
+        const existentes = new Set(pagos.map((p) => isoDate(p.periodo)));
+
+        const data = periodosEntre(inicio, hasta)
+          .filter((periodo) => !existentes.has(periodo))
+          .flatMap((periodo) => {
+            const monto = montoVigenteEn(filas, periodo);
+            return monto === null
+              ? []
+              : [
+                  {
+                    contratoId,
+                    periodo: fechaADate(periodo),
+                    montoEsperadoClp: monto,
+                    fechaEsperada: fechaADate(fechaEsperada(periodo, contrato.diaEsperadoPago)),
+                  },
+                ];
+          });
+        const { count } = await tx.pagoEsperado.createMany({ data, skipDuplicates: true });
+        return { creados: count, existentes: pagos.length };
       });
     },
   };

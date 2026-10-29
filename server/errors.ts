@@ -15,6 +15,14 @@ export class ConflictError extends Error {
   }
 }
 
+// Entrada bien formada pero que viola una regla de negocio (HTTP 422).
+export class UnprocessableError extends Error {
+  constructor(message = "La entrada no cumple una regla de negocio") {
+    super(message);
+    this.name = "UnprocessableError";
+  }
+}
+
 // Único punto de traducción de errores a HTTP (architecture.md §17).
 export function toHttpResponse(error: unknown): Response {
   if (error instanceof ZodError) {
@@ -30,6 +38,9 @@ export function toHttpResponse(error: unknown): Response {
   }
   if (error instanceof ConflictError) {
     return Response.json({ error: error.message }, { status: 409 });
+  }
+  if (error instanceof UnprocessableError) {
+    return Response.json({ error: error.message }, { status: 422 });
   }
   console.error(error);
   return Response.json({ error: "Error interno" }, { status: 500 });

@@ -434,11 +434,14 @@ desde un período.
 
 `UNIQUE (contrato_id, vigente_desde_periodo)`. Todo contrato tiene **al menos una fila**.
 
-> **Excepción temporal (propuesta a validar).** En T04 el monto inicial es **opcional** en el
-> alta: un contrato creado sin monto no tiene fila en esta tabla hasta T05. La invariante
-> «al menos una fila» queda **relajada hasta T05**, que deberá tratar contratos sin monto
-> (por ejemplo, exigiéndolo antes de generar pagos esperados). T04 solo crea la fila inicial;
-> no la modifica al editar el contrato ni agrega reajustes.
+> **Excepción temporal (propuesta a validar).** El monto inicial es **opcional** en el alta
+> (T04): un contrato creado sin monto no tiene fila en esta tabla hasta que se le registre
+> el primer monto. La invariante «al menos una fila» queda **relajada** mientras tanto, y T05
+> la trata así: un contrato sin monto no genera pagos esperados. T05 registra el primer
+> monto (siempre con `vigente_desde_periodo` = mes de `fecha_inicio`) y los reajustes como
+> filas nuevas: nunca modifica ni elimina una fila anterior; un período fuera de la vigencia
+> del contrato se rechaza (422) y un período repetido también (409). La edición del contrato
+> (T04) nunca escribe en esta tabla.
 
 **El monto inicial es la primera fila, no una columna del contrato.** Esta es la decisión
 central de la entidad: hay una única fuente de verdad para el monto, y un reajuste deja de
@@ -465,7 +468,14 @@ contrato vigente.
 | `fecha_esperada` | `DATE` | No | | Fecha en que se espera el pago |
 | `created_at`, `updated_at` | `TIMESTAMPTZ` | No | | |
 
-`UNIQUE (contrato_id, periodo)`.
+`UNIQUE (contrato_id, periodo)`. En la base: `CHECK (monto_esperado_clp > 0)` y período
+en día 1 (T05). Sin estado ni abonos: el estado es derivado (T06, §6.1).
+
+**Generación (T05).** Las filas solo las crea una **sincronización explícita** e idempotente,
+nunca un `GET` ni un proceso programado: desde el mes de `fecha_inicio` hasta el menor entre
+el mes en curso y el mes de `fecha_termino`, y solo si el contrato tiene un monto registrado.
+La sincronización no modifica ni elimina filas existentes; un reajuste solo actualiza
+`monto_esperado_clp` (y `updated_at`) de las filas existentes desde su período.
 
 **Se persiste, en lugar de derivarse al vuelo**, por dos razones: los abonos necesitan una
 clave foránea estable a la que apuntar, y el producto exige que el pago esperado conserve el

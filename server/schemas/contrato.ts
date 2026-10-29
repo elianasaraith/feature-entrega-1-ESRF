@@ -6,11 +6,12 @@ import {
   optionalText,
   positiveIntegerText,
   vacioANull,
+  yearMonth,
 } from "./shared";
 
 // Espejo de docs/data-model.md §4.6 y de los CHECK de la migración. El monto
-// inicial solo existe en el alta (T04): la edición no lo acepta ni lo modifica;
-// reajustes y nuevas filas de contrato_monto son T05.
+// inicial solo existe en el alta: la edición no lo acepta ni lo modifica; las
+// filas posteriores de contrato_monto se registran con montoCrearSchema (T05).
 
 const fecha = z
   .string()
@@ -77,5 +78,14 @@ export const contratoActualizarSchema = z
   })
   .superRefine(terminoNoAnterior);
 
+// Primer monto o reajuste (T05): una fila nueva de contrato_monto. El período
+// llega como YYYY-MM y se normaliza al día 1.
+export const montoCrearSchema = z.object({
+  montoMensualClp: positiveIntegerText(14),
+  vigenteDesdePeriodo: yearMonth.transform((v) => `${v}-01`),
+  motivo: optionalText,
+});
+
+export type MontoCrearInput = z.output<typeof montoCrearSchema>;
 export type ContratoCrearInput = z.output<typeof contratoCrearSchema>;
 export type ContratoActualizarInput = z.output<typeof contratoActualizarSchema>;

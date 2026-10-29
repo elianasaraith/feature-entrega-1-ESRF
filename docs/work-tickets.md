@@ -239,8 +239,9 @@ garantía es información contractual, no un ingreso recurrente (`product.md` §
 **Entidades involucradas:** `arrendatario`, `contrato_arriendo` (`data-model.md` §4.5,
 §4.6) y, solo para el **monto inicial opcional**, la primera fila de `contrato_monto`
 (§4.7). Si el alta informa el monto, T04 crea esa fila en la misma transacción; si no, el
-contrato queda sin fila y la invariante «al menos una fila» se relaja hasta T05
-(*propuesta a validar*). Reajustes, nuevas filas y el cálculo del monto vigente son T05.
+contrato queda sin fila y la invariante «al menos una fila» se relaja hasta que T05
+registre el primer monto (*propuesta a validar*). Reajustes, nuevas filas y el cálculo del
+monto vigente son T05.
 
 **Componentes y capas arquitectónicas:**
 - UI: `app/contratos/` (`architecture.md` §7).
@@ -332,6 +333,43 @@ prorrateo intramensual de un reajuste (fuera de alcance por decisión de modelo,
 - Nivel prioritario de la pirámide de `architecture.md` §18: los casos límite de HU02 se
   traducen directamente a tablas de casos.
 
+**Estado de implementación (T05, cambio OpenSpec `implement-rent-adjustments`).**
+Implementado y verificado con `npm test` (144 pruebas, 0 fallidas), TypeScript y lint sin
+errores, y revisión manual de la interfaz.
+- *Primer monto y reajustes:* `POST /api/propiedades/{id}/contratos/{contratoId}/montos`
+  agrega una fila a `contrato_monto`; nunca modifica ni elimina las anteriores. Sin filas,
+  el primer monto rige desde el mes de `fecha_inicio`. Período fuera de la vigencia del
+  contrato (anterior al inicio o posterior al término) → 422; período repetido → 409.
+  `GET` del mismo path devuelve el historial y el monto vigente (solo lectura).
+- *Pagos esperados ya existentes:* el reajuste actualiza `monto_esperado_clp` (y su
+  `updated_at`) únicamente desde su período, calculando cada pago sobre todas las filas, de
+  modo que un reajuste anterior no pisa a uno posterior. Los meses anteriores conservan su
+  monto. No crea pagos.
+- *Generación de pagos esperados:* operación explícita
+  `POST .../pagos-esperados/sincronizar`, idempotente (`UNIQUE(contrato_id, periodo)` +
+  bloqueo por propiedad). Crea los pagos faltantes desde el mes de inicio —solo si hay un
+  monto registrado— hasta `min(mes en curso, mes de término)`; nunca modifica ni borra pagos
+  existentes. Ningún `GET` escribe y no hay cron. *Desviación frente a `architecture.md`
+  §5.4* (generar «antes de operar sobre los pagos de un período»): T05 expone la
+  sincronización como acción explícita; T06 podrá invocarla antes de registrar un abono sin
+  cambiar su contrato.
+- *Edición de contrato (T04):* el PUT responde 409 solo si acortar `fecha_termino` deja
+  fuera de vigencia un monto o un pago esperado ya registrado; las demás ediciones válidas
+  no se bloquean.
+- *Interfaz:* `/propiedades/[id]/contratos/[contratoId]/montos` (historial, monto vigente,
+  primer monto o reajuste, sincronizar pagos), enlazada desde la lista de contratos.
+- *Alcance:* el AC3 se cumple en lo que T05 posee, el **monto esperado**. El **estado** del
+  pago no se calcula ni se persiste: es derivado y depende de los abonos (T06).
+
+**Comportamiento previsto de los reajustes cuando T06 registre abonos** (diseñado, no
+implementado): el reajuste solo cambia `monto_esperado_clp`; nunca modifica, elimina ni
+reasigna abonos y no se bloquea por su existencia. El estado se deriva al consultar
+(`data-model.md` §6.1): un pago pagado cuyo esperado sube pasa a *vencido con abonos
+parciales* si su fecha esperada ya pasó (CL12) o a *parcialmente pagado* si no (CL13); si el
+esperado baja, los abonos excedentes se admiten (CL14). T05 no persiste estado, saldo ni
+exceso. Fuera de T05 quedan los abonos y pagos recibidos (T06) y los movimientos financieros
+(T07).
+
 ---
 
 ### 4.6 T06 — Registro de abonos y estado del pago de arriendo
@@ -373,7 +411,8 @@ abonos y la fecha esperada (`data-model.md` §6.1); *vencido con abonos parciale
 - API: Route Handler de abonos, capacidad "Pagos de arriendo" (`architecture.md` §8.3).
 - Persistencia: `abono_arriendo` sin restricción de tope sobre el monto.
 
-**Dependencias:** T05 (`pago_esperado_id`).
+**Dependencias:** T05 (`pago_esperado_id`). Ante un reajuste, T06 solo deriva el estado
+sobre el `monto_esperado_clp` ya actualizado por T05 (ver «Comportamiento previsto» en T05).
 
 **Fuera de alcance:** cobrar o ejecutar el pago (`product.md` §8); consolidación del
 ingreso dentro del flujo del mes (T09); comprobante del abono como documento (T11, no

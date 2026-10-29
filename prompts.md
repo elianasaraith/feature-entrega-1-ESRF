@@ -380,6 +380,10 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 > Implementa el cambio OpenSpec implement-lease-management siguiendo los artefactos aprobados. Mantén el modelo de usuario único (sin usuario_id) y exige sesión y existencia del arrendatario. Rechaza con 409 los cambios de mes de fechaInicio cuando el contrato ya tenga monto inicial. Mantén pg_advisory_xact_lock para las operaciones concurrentes. No implementes T05 ni T06. Puedes generar los archivos de migración, pero antes de aplicar cualquiera verifica y muestra host, puerto y nombre de la base de destino sin credenciales; aplícala solo a realtytrack_test y nunca a realtytrack ni a producción sin mi autorización. No modifiques .env ni hagas commit ni push.
 
+**T05 — montos de arriendo, reajustes y pagos esperados (apply de `implement-rent-adjustments`):**
+
+> Implementa T05 siguiendo los artefactos aprobados de OpenSpec. Agrega UnprocessableError para HTTP 422; el PUT de contratos responde 409 únicamente cuando acortar fechaTermino deja fuera de vigencia montos registrados o pagos esperados existentes, sin bloquear modificaciones válidas. Un reajuste actualiza solo los montos esperados desde su período (y updated_at solo si el monto cambia) y no crea pagos; los pagos se generan con una sincronización explícita e idempotente, sin cron ni escrituras desde un GET, solo si existe un monto registrado. Mantén la interfaz obligatoria para registrar montos, reajustes y sincronizar. No implementes abonos, pagos recibidos ni movimientos financieros (T06 y T07). Reutiliza los servicios y el bloqueo por propiedad existentes, sin dependencias ni abstracciones nuevas. Antes de aplicar cualquier migración pide mi autorización; solo realtytrack_test primero. No modifiques .env ni hagas commit ni push.
+
 ---
 
 ### 7. Pull Requests

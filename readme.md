@@ -11,12 +11,16 @@
 
 ---
 
-> **Nota sobre el estado de esta entrega.** Entrega 1 es exclusivamente documental
-> (`CLAUDE.md`): no existe código de aplicación, despliegue real, tests ejecutados
-> ni interfaz funcionando. Lo que sigue es diseño y documentación propuestos, que
-> guiarán la implementación en las entregas siguientes. Cada sección lo deja
-> explícito donde corresponde. El detalle técnico completo vive en `docs/`; este
-> documento lo resume e integra, sin duplicarlo.
+> **Nota sobre el estado del proyecto.** RealtyTrack ya tiene funcionalidades
+> implementadas: autenticación de usuario único (T12), propiedades (T01), créditos
+> hipotecarios y su registro mensual (T02, T03), contratos de arriendo (T04) y montos,
+> reajustes y pagos esperados (T05), con pruebas automatizadas ejecutadas y una interfaz
+> funcional para esas capacidades. **El MVP no está terminado**: siguen pendientes, entre
+> otros, abonos y estado del pago (T06), movimientos financieros (T07), aportes de capital
+> (T08), dashboard (T09), integración con la API de UF (T10) y documentos (T11), además del
+> despliegue. Lo que describen las secciones para esas capacidades es diseño propuesto; cada
+> sección distingue lo implementado de lo propuesto. El detalle técnico completo vive en
+> `docs/`; este documento lo resume e integra, sin duplicarlo.
 
 ## 0. Ficha del proyecto
 
@@ -520,8 +524,8 @@ consultada por período.
 | `credito_registro_mensual` | Serie mensual del dividendo pagado y el saldo informado por el banco | PK `id`; FK `credito_id` | `UNIQUE(credito_id, periodo)`; dos `CHECK` — no ambos datos nulos; `fecha_pago_dividendo` presente si y solo si hay dividendo |
 | `arrendatario` | Persona que arrienda, reutilizable entre contratos sucesivos | PK `id`; `rut` UNIQUE nulable | — |
 | `contrato_arriendo` | Contrato de arriendo de una propiedad, con su vigencia y garantía | PK `id`; FK `propiedad_id`, `arrendatario_id` | Sin columna `estado`: la vigencia se deriva de `fecha_inicio`/`fecha_termino` |
-| `contrato_monto` | Histórico de los montos aplicados a lo largo de un contrato | PK `id`; FK `contrato_id` | `UNIQUE(contrato_id, vigente_desde_periodo)`; el monto inicial es su primera fila, no una columna del contrato (en T04 es opcional en el alta: la invariante «al menos una fila» se relaja hasta T05, propuesta a validar) |
-| `pago_esperado` | Lo que se espera cobrar por arriendo en un período mensual | PK `id`; FK `contrato_id` | `UNIQUE(contrato_id, periodo)`; snapshot del monto vigente en ese mes, recalculado ante un reajuste retroactivo |
+| `contrato_monto` | Histórico de los montos aplicados a lo largo de un contrato | PK `id`; FK `contrato_id` | `UNIQUE(contrato_id, vigente_desde_periodo)`; el monto inicial es su primera fila, no una columna del contrato (el monto inicial es opcional en el alta: sin él el contrato no tiene fila y no genera pagos esperados hasta registrar el primer monto, T05; propuesta a validar). Los reajustes agregan filas y nunca modifican las anteriores |
+| `pago_esperado` | Lo que se espera cobrar por arriendo en un período mensual | PK `id`; FK `contrato_id` | `UNIQUE(contrato_id, periodo)`; `CHECK` monto > 0 y período día 1; snapshot del monto vigente en ese mes. Lo crea una sincronización explícita e idempotente (T05) y un reajuste solo actualiza `monto_esperado_clp` desde su período |
 | `abono_arriendo` | Cada entrega de dinero recibida contra un pago esperado | PK `id`; FK `pago_esperado_id` | Sin tope: los abonos pueden exceder el monto esperado sin rechazar el registro |
 | `movimiento_financiero` | Egresos e inversiones de una propiedad | PK `id`; FK `propiedad_id` | `ENUM categoria_movimiento` sin valor `DIVIDENDO`, para no duplicar esa salida de dinero |
 | `aporte_capital` | Capital propio que el propietario incorpora a una propiedad | PK `id`; FK `propiedad_id`; FK opcional `movimiento_financiero_id` | Nunca entra en el flujo neto antes de aportes |
@@ -588,19 +592,27 @@ en Entrega 1. Donde el detalle exacto de un campo no está fijado por
 **contrato API propuesto de Entrega 1**, para no presentarlo como una
 decisión ya cerrada.
 
-### 4.1 `POST /api/contratos/{contratoId}/reajustes`
+### 4.1 `POST /api/propiedades/{propiedadId}/contratos/{contratoId}/montos`
 
-Registrar un reajuste del monto de arriendo. Escribe una nueva fila en
-`contrato_monto` y recalcula explícitamente el `monto_esperado_clp` de los
-`pago_esperado` afectados por su vigencia, incluida vigencia retroactiva
-(`docs/data-model.md` §4.7–§4.8; `docs/architecture.md` §5.4, §8.3).
+Registrar el primer monto o un reajuste del monto de arriendo (T05, **implementado**).
+Escribe una nueva fila en `contrato_monto` —nunca modifica ni elimina las anteriores— y
+actualiza `monto_esperado_clp` de los `pago_esperado` ya existentes desde su período, sin
+alterar los meses anteriores (`docs/data-model.md` §4.7–§4.8). No crea pagos: eso lo hace la
+operación explícita `POST .../pagos-esperados/sincronizar`, que genera los pagos faltantes
+desde el mes de inicio hasta el mes en curso (o el de término), es idempotente y solo
+actúa si el contrato tiene un monto registrado. No registra abonos ni calcula el estado del
+pago (T06).
 
 ```yaml
 paths:
-  /api/contratos/{contratoId}/reajustes:
+  /api/propiedades/{propiedadId}/contratos/{contratoId}/montos:
     post:
-      summary: Registrar un reajuste del monto de arriendo
+      summary: Registrar el primer monto o un reajuste del monto de arriendo
       parameters:
+        - name: propiedadId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
         - name: contratoId
           in: path
           required: true
@@ -611,37 +623,41 @@ paths:
           application/json:
             schema:
               type: object
-              required: [monto_mensual_clp, vigente_desde_periodo]
+              required: [montoMensualClp, vigenteDesdePeriodo]
               properties:
-                monto_mensual_clp: { type: string, description: "CLP, > 0, representación sin pérdida (docs/architecture.md §9.1)" }
-                vigente_desde_periodo: { type: string, format: date, description: "Día 1 del mes" }
+                montoMensualClp: { type: string, description: "CLP entero > 0, hasta NUMERIC(14,0)" }
+                vigenteDesdePeriodo: { type: string, description: "Mes en formato YYYY-MM; se almacena como día 1" }
                 motivo: { type: string, nullable: true }
       responses:
-        "201": { description: "Reajuste registrado; incluye los períodos de pago_esperado recalculados" }
-        "400": { description: "Entrada inválida, incluida vigente_desde_periodo anterior al inicio del contrato (docs/data-model.md §5.1)" }
-        "404": { description: "Contrato inexistente" }
+        "201": { description: "Fila de contrato_monto creada" }
+        "400": { description: "Entrada inválida (monto o período mal formado)" }
+        "404": { description: "Propiedad o contrato inexistente, o el contrato no pertenece a la propiedad" }
+        "409": { description: "Ya existe un monto para ese período" }
+        "422": { description: "Primer monto distinto del mes de inicio, o período fuera de la vigencia del contrato" }
 ```
 
 Ejemplo:
 
-`POST /api/contratos/6f2b2e2a-.../reajustes`
+`POST /api/propiedades/3c1d…/contratos/6f2b…/montos`
 
 ```json
-{ "monto_mensual_clp": "530000", "vigente_desde_periodo": "2026-02-01", "motivo": "reajuste anual" }
+{ "montoMensualClp": "530000", "vigenteDesdePeriodo": "2026-09", "motivo": "reajuste anual" }
 ```
 
 Respuesta `201`:
 
 ```json
 {
-  "contrato_monto": { "id": "...", "monto_mensual_clp": "530000", "vigente_desde_periodo": "2026-02-01" },
-  "periodos_recalculados": ["2026-02-01", "2026-03-01"]
+  "id": "...",
+  "montoMensualClp": "530000",
+  "vigenteDesdePeriodo": "2026-09-01",
+  "motivo": "reajuste anual",
+  "createdAt": "..."
 }
 ```
 
-`periodos_recalculados` es **contrato API propuesto de Entrega 1**:
-`docs/architecture.md` §5.4 confirma que el recálculo ocurre; no fija todavía
-la forma exacta de la respuesta.
+Verificado: `npm test` (144 pruebas, 0 fallidas), TypeScript, lint y revisión manual de
+la interfaz de montos. El borrado y la edición de filas de monto no existen (405).
 
 ### 4.2 `POST /api/pagos-esperados/{pagoEsperadoId}/abonos`
 

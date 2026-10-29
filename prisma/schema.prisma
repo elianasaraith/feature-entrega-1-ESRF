@@ -133,6 +133,7 @@ model ContratoArriendo {
   propiedad    Propiedad       @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
   arrendatario Arrendatario    @relation(fields: [arrendatarioId], references: [id], onDelete: Restrict)
   montos       ContratoMonto[]
+  pagos        PagoEsperado[]
 
   @@index([propiedadId, fechaInicio])
   @@index([arrendatarioId])
@@ -155,4 +156,23 @@ model ContratoMonto {
 
   @@unique([contratoId, vigenteDesdePeriodo])
   @@map("contrato_monto")
+}
+
+// Lo que se espera cobrar de un contrato en un mes (docs/data-model.md §4.8).
+// Solo se crea con la sincronización explícita (T05); `monto_esperado_clp` es un
+// snapshot del monto vigente que un reajuste actualiza. `periodo` es día 1
+// (CHECK en la migración). Sin estado ni abonos: son de T06.
+model PagoEsperado {
+  id               String   @id @default(uuid()) @db.Uuid
+  contratoId       String   @map("contrato_id") @db.Uuid
+  periodo          DateTime @db.Date
+  montoEsperadoClp Decimal  @map("monto_esperado_clp") @db.Decimal(14, 0)
+  fechaEsperada    DateTime @map("fecha_esperada") @db.Date
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  contrato ContratoArriendo @relation(fields: [contratoId], references: [id], onDelete: Restrict)
+
+  @@unique([contratoId, periodo])
+  @@map("pago_esperado")
 }

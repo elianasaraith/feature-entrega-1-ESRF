@@ -175,16 +175,19 @@ lugares que mantener sincronizados a cambio de nada.
 vigente*, y `data-model.md` §4.8 exige que sean **filas persistidas**, no una derivación al
 vuelo: los abonos necesitan una clave foránea estable a la que apuntar.
 
-Es la única escritura del sistema sin un acto humano que la dispare, así que conviene fijar
-quién la hace y cuándo.
+Conviene fijar quién la hace y cuándo.
 
 | Aspecto | Decisión |
 |---|---|
 | Responsable | La **capa de servicios**. No es una función de dominio: escribe |
-| Momento | **Antes de operar sobre los pagos de un período** —consultarlos o registrar un abono—, el servicio garantiza que existen las filas correspondientes a los contratos vigentes en ese período |
-| Idempotencia | La operación se puede repetir sin efecto. `UNIQUE (contrato_id, periodo)` impide duplicados |
+| Momento | **Mediante una sincronización explícita** (T05, implementada): una operación del servicio, `POST .../contratos/{contratoId}/pagos-esperados/sincronizar`, crea las filas faltantes desde el mes de inicio del contrato hasta el menor entre el mes en curso y el de término, solo si el contrato tiene un monto registrado. Registrar un monto o un reajuste no crea pagos, y ninguna consulta (`GET`) escribe. T06 podrá invocar esta misma operación antes de registrar un abono, sin cambiar su contrato |
+| Idempotencia | La operación se puede repetir sin efecto. `UNIQUE (contrato_id, periodo)` impide duplicados y nunca modifica ni elimina filas existentes |
 | Sin trabajo programado | No hay cron ni tarea periódica que las cree por adelantado |
-| Sin generación desde la UI | Ningún componente dispara la creación; la garantiza el servicio |
+| Disparo | Lo dispara el usuario con una acción explícita (botón de sincronizar); la creación la ejecuta el servicio y ningún componente calcula nada |
+
+*Decisión que sustituye la formulación original* («antes de operar sobre los pagos de un
+período, consultarlos o registrar un abono»): se prefirió una operación explícita a escrituras
+silenciosas desde lecturas.
 
 **Meses sin contrato vigente no generan nada**, y esa ausencia no es impago (HU02 CL15).
 
@@ -193,8 +196,8 @@ almacena el *estado* del pago; garantizar que existan las filas esperadas de un 
 otra cosa, y sigue sin persistir ningún dato derivado.
 
 **Los reajustes retroactivos no son generación, sino recálculo.** Registrar un reajuste con
-vigencia pasada recalcula explícitamente el `monto_esperado_clp` de los períodos afectados,
-tal como describe `data-model.md` §4.8. Los estados de esos pagos no se tocan: se derivan
+vigencia pasada recalcula explícitamente el `monto_esperado_clp` de los pagos ya existentes
+desde su período (los meses anteriores no cambian), tal como describe `data-model.md` §4.8. Los estados de esos pagos no se tocan: se derivan
 después, en la siguiente lectura, a partir del monto corregido.
 
 ---

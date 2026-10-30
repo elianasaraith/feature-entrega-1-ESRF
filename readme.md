@@ -43,9 +43,10 @@ consolidación manual.
 ### **0.4. URL del proyecto:**
 
 No existe un despliegue público. La aplicación se evalúa **localmente** siguiendo
-las instrucciones de la sección 1.4, o mediante un video demostrativo (*pendiente de
-publicar*). El despliegue en Vercel descrito en la sección 2.4 es un diseño propuesto,
-no implementado.
+las instrucciones de la sección 1.4, o mediante el **video explicativo** incluido en el
+repositorio: [`realtytrack-entrega2.mp4`](realtytrack-entrega2.mp4) (archivo en la raíz;
+en GitHub se reproduce desde el enlace, o descargando el repositorio). El despliegue en
+Vercel descrito en la sección 2.4 es un diseño propuesto, no implementado.
 
 ### 0.5. URL o archivo comprimido del repositorio
 
@@ -111,8 +112,9 @@ Detalle completo: [docs/product.md](docs/product.md) §5–§6.
 
 **Estado:** la interfaz está implementada para acceso (`/login`), propiedades,
 crédito hipotecario con su registro mensual, contratos y montos de arriendo
-(`app/propiedades/**`, `app/(auth)/login`); no hay todavía capturas ni video en este
-documento. Las vistas de abonos, movimientos, aportes, documentos y el dashboard siguen
+(`app/propiedades/**`, `app/(auth)/login`). Un recorrido de la aplicación en
+funcionamiento está en el video [`realtytrack-entrega2.mp4`](realtytrack-entrega2.mp4);
+este documento no incluye capturas. Las vistas de abonos, movimientos, aportes, documentos y el dashboard siguen
 *pendientes*. El siguiente diagrama resume el **flujo de navegación previsto** (los
 nodos `app/dashboard` y `app/contratos` son diseño; en la aplicación actual los
 contratos viven bajo `app/propiedades/[id]/contratos`), construido a partir de las
@@ -137,7 +139,9 @@ derivados desde la capa de servicios (`docs/architecture.md` §7).
 
 ### **1.4. Instrucciones de instalación:**
 
-La aplicación se ejecuta **en local**; no hay despliegue público (sección 0.4).
+La aplicación se ejecuta **en local**; no hay despliegue público (sección 0.4). Si prefieres
+no instalarla, el video [`realtytrack-entrega2.mp4`](realtytrack-entrega2.mp4) muestra la
+aplicación funcionando.
 
 **Stack implementado** (`package.json`): Next.js 16 (App Router) + React 19 +
 TypeScript, Tailwind CSS 4, Route Handlers como API REST, Prisma 6 sobre

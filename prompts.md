@@ -14,6 +14,67 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 ---
 
+## Herramientas, modelos y contexto avanzado
+
+**Herramientas.**
+
+| Herramienta | Uso en RealtyTrack |
+|---|---|
+| Claude Code (extensión de VS Code) | Asistente de código en todas las fases: documentación de la Entrega 1 y desarrollo de T01–T05 y T12 |
+| OpenSpec | Flujo Spec-Driven Development: `openspec/specs/` (6 capacidades) y `openspec/changes/archive/` (7 cambios archivados: fundación, autenticación, propiedades, créditos, registro mensual, contratos, reajustes) |
+| Comandos y skills del repositorio | `.claude/commands/opsx/` (explore, propose, apply, verify, archive…) y `.claude/skills/` (skills `openspec-*`) |
+
+**Modelos.** Claude, a través de Claude Code. En la sesión de T05 el modelo fue **Claude
+Sonnet 5.5**; el modelo de las sesiones anteriores no quedó registrado en el repositorio y
+no se afirma aquí.
+
+**Contexto avanzado (respaldado por el repositorio).**
+
+- `CLAUDE.md`: contexto del proyecto, stack confirmado, reglas confirmadas del dominio,
+  fuera de alcance y reglas de trabajo (consultar antes de cambiar, no inventar
+  requisitos, anonimizar datos, registrar prompts).
+- Skill `project-documentation` (`.claude/skills/project-documentation/`): procedimiento
+  para redactar y mantener coherentes `docs/`, `readme.md` y `prompts.md`.
+- `docs/` como fuente de verdad que precede al código: producto, historias, modelo de
+  datos, arquitectura y tickets (T01–T12).
+- Flujo Spec-Driven Development con OpenSpec: *explore → propose* (proposal, delta de
+  especificación, diseño, tareas) *→ apply → verify → archive*; el archivo del cambio
+  conserva proposal, diseño, especificación y tareas verificadas.
+
+## Workflows representativos
+
+Cinco workflows concentran el uso de IA; el detalle de los prompts está en las secciones
+indicadas.
+
+| # | Workflow | Qué demuestra | Dónde |
+|---|---|---|---|
+| W1 | Documentación spec-first (Entrega 1): producto → historias → modelo → arquitectura → tickets → README | IA para diseñar y documentar antes de programar, con correcciones de las propuestas | Secciones 1–6 |
+| W2 | Autenticación y propiedades (T12, T01) con OpenSpec | Restricciones de seguridad y de pruebas dadas a la IA antes de implementar | Sección 6, «T01 — precisiones…» |
+| W3 | Créditos y registro mensual (T02, T03) | Aislamiento de la base de pruebas comprobado por componentes, no por texto | Sección 6, «T03 — ajustes… / refuerzo…» |
+| W4 | Contratos (T04) | Migraciones escritas por la IA y aplicadas solo con verificación y autorización | Sección 6, «T04 — gestión de contratos…» |
+| W5 | Montos, reajustes y pagos esperados (T05): explore → plan → propose → apply → verify → archive | Ciclo completo con el plan corregido por la persona, validación manual y archivo | Sección 6, «T05 — montos…» y abajo |
+
+**W5 en detalle (hechos del desarrollo de T05).** Se pidió explorar T05 sin modificar
+archivos; la IA presentó un plan, la persona **lo rechazó con seis ajustes** (interfaz
+obligatoria, reajustes que solo actualizan montos desde su período, sincronización
+explícita en lugar de escrituras silenciosas desde un `GET`, alcance mínimo, documentar el
+comportamiento futuro con abonos y verificar la migración) y la IA lo reescribió antes de
+generar los artefactos OpenSpec. Después se implementó, se verificó contra los artefactos
+(`/opsx:verify`), se validó manualmente en la interfaz y se archivó (`/opsx:archive`).
+
+## Decisiones humanas relevantes
+
+| Decisión | Evidencia |
+|---|---|
+| **Control del alcance del MVP**: la persona acota cada cambio y prohíbe adelantar tickets («No implementes T05 ni T06», «No implementes abonos… T06 o T07») | Prompts de T04 y T05 (sección 6) |
+| **Corrección de propuestas de la IA**: se rechazó dividir el backlog en tickets T13/T14 por capa; se rechazó el plan v1 de T05 | Sección 6, Prompt 2; W5 |
+| **Revisión y aprobación de migraciones**: la IA solo escribe el SQL; se verifica su contenido y la base de destino, y se aplica primero a `realtytrack_test` y a desarrollo solo con autorización explícita; las migraciones las aplica la persona | Prompts de T04 y T05; `tasks.md` del cambio archivado `implement-rent-adjustments` (tarea 1.3) |
+| **Aislamiento de la base de pruebas**: las pruebas de integración solo escriben en `TEST_DATABASE_URL`, distinta de `DATABASE_URL`/`DIRECT_URL`, comparando host, puerto, base y schema | Prompts de T01 y T03; `tests/setup/test-db.ts` |
+| **Validación manual de funcionalidades**: la persona verificó en la interfaz el primer monto, el 409 por período repetido y el 422 por período fuera de vigencia antes de cerrar la tarea 5.4 | `tasks.md` archivado de `implement-rent-adjustments` |
+| **Decisión de producto sobre una regla técnica**: aceptar el 409 del PUT de contratos solo cuando acortar el término deje fuera montos o pagos existentes | Prompt de T05 |
+
+---
+
 ## 1. Descripción general del producto
 
 **Prompt 1:**
@@ -347,6 +408,10 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 **Prompt 3:**
 
 *Implementación posterior, con OpenSpec, de T01 (Gestión de propiedades) y T03 (Registro mensual de dividendo y saldo del crédito, cuya capa de base de datos ilustra el «Ticket 3» del README): fragmentos de los mensajes que aprobaron cada plan y fijaron sus precisiones. Los criterios de T03 se verificaron con pruebas unitarias, pruebas de integración contra una BD de pruebas aislada y una verificación manual en la interfaz.*
+
+*Registro complementario de la fase de implementación (W2–W5 de «Workflows
+representativos»). No cuenta como prompts principales adicionales de esta sección: agrupa
+los mensajes de apply de T01 a T05 con las restricciones que se dieron a la IA.*
 
 **T01 — precisiones de autenticación, pruebas de integración y validaciones:**
 

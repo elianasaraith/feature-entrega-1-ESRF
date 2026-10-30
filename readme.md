@@ -42,16 +42,18 @@ consolidación manual.
 
 ### **0.4. URL del proyecto:**
 
-Pendiente. Entrega 1 es exclusivamente documental: no existe despliegue de la
-aplicación.
+No existe un despliegue público. La aplicación se evalúa **localmente** siguiendo
+las instrucciones de la sección 1.4, o mediante un video demostrativo (*pendiente de
+publicar*). El despliegue en Vercel descrito en la sección 2.4 es un diseño propuesto,
+no implementado.
 
 ### 0.5. URL o archivo comprimido del repositorio
 
 `https://github.com/elianasaraith/feature-entrega-1-ESRF.git`
 
-Esta entrega se desarrolla en la rama `feature/entrega-1-ESRF` —rama de
-trabajo, no parte de la URL del repositorio—; la rama por defecto del remoto
-es `main`.
+Esta entrega (Entrega 2) se desarrolla en la rama `feature/entrega-2-ESRF` —rama de
+trabajo, no parte de la URL del repositorio—; la documentación de la Entrega 1 se
+conserva en `feature/entrega-1-ESRF` y la rama por defecto del remoto es `main`.
 
 ---
 
@@ -107,9 +109,14 @@ Detalle completo: [docs/product.md](docs/product.md) §5–§6.
 
 ### **1.3. Diseño y experiencia de usuario:**
 
-Entrega 1 no incluye interfaz implementada, por lo que esta sección no
-contiene capturas ni video. El siguiente diagrama resume el **flujo de
-navegación previsto**, construido a partir de las vistas ya definidas en
+**Estado:** la interfaz está implementada para acceso (`/login`), propiedades,
+crédito hipotecario con su registro mensual, contratos y montos de arriendo
+(`app/propiedades/**`, `app/(auth)/login`); no hay todavía capturas ni video en este
+documento. Las vistas de abonos, movimientos, aportes, documentos y el dashboard siguen
+*pendientes*. El siguiente diagrama resume el **flujo de navegación previsto** (los
+nodos `app/dashboard` y `app/contratos` son diseño; en la aplicación actual los
+contratos viven bajo `app/propiedades/[id]/contratos`), construido a partir de las
+vistas definidas en
 [docs/architecture.md](docs/architecture.md) §7 y la estructura de `app/` de
 §6:
 
@@ -130,25 +137,89 @@ derivados desde la capa de servicios (`docs/architecture.md` §7).
 
 ### **1.4. Instrucciones de instalación:**
 
-Entrega 1 no incluye código de aplicación: no hay todavía una aplicación
-ejecutable que instalar. Esta sección se completará con comandos verificados
-en las entregas siguientes, una vez exista implementación.
+La aplicación se ejecuta **en local**; no hay despliegue público (sección 0.4).
 
-Como referencia, el stack objetivo (`docs/architecture.md` §3) es:
+**Stack implementado** (`package.json`): Next.js 16 (App Router) + React 19 +
+TypeScript, Tailwind CSS 4, Route Handlers como API REST, Prisma 6 sobre
+PostgreSQL, Auth.js (`next-auth` 5 beta, proveedor de credenciales con sesión JWT),
+`argon2` para el hash de la contraseña, Zod 4 para validar entradas, y pruebas con el
+ejecutor nativo `node --test` (+ `tsx`). **Aún no implementado** (diseño propuesto):
+object storage S3, integración con la API de UF, Vercel/Neon.
 
-- Next.js (App Router) + TypeScript — aplicación full-stack, un único
-  despliegue
-- React + Tailwind CSS
-- API REST mediante Route Handlers de Next.js
-- PostgreSQL en Neon, acceso con Prisma
-- Auth.js (proveedor de credenciales, sesión JWT)
-- Object storage compatible con S3 (proveedor concreto *propuesta a validar*)
-- Vercel para el despliegue
+**Requisitos previos:** Node.js (≥ 20; desarrollado con 23.11) con npm, y Docker con
+Docker Compose para la base de datos local.
 
-La instalación prevista incluirá: instalar dependencias, configurar las
-variables de entorno (`docs/architecture.md` §16), aplicar las migraciones de
-Prisma y ejecutar el script de seed anonimizado (`docs/architecture.md` §14)
-— sin importador de datos, por decisión de producto.
+**1. Instalar dependencias**
+
+```bash
+npm install
+```
+
+**2. Configurar variables de entorno.** Copia la plantilla y completa los valores
+(`.env` está ignorado por Git; nunca lo versiones):
+
+```bash
+cp .env.example .env
+```
+
+Variables que usa el código: `DATABASE_URL` y `DIRECT_URL` (conexión a PostgreSQL;
+Prisma las lee de `.env`), `SEED_USER_EMAIL` y `SEED_USER_PASSWORD` (credenciales del
+usuario único que crean los seeds), el secreto de sesión de Auth.js (`AUTH_SECRET`,
+estándar de Auth.js v5; confirma su nombre en `.env.example`) y, solo para las pruebas
+de integración, `TEST_DATABASE_URL`. Para la base local de Docker Compose la URL tiene
+la forma `postgresql://realtytrack:<contraseña de docker-compose.yml>@localhost:5436/realtytrack`.
+
+**3. Iniciar PostgreSQL con Docker Compose** (PostgreSQL 16, puerto `5436`, base y
+usuario `realtytrack`; la contraseña de desarrollo local está en `docker-compose.yml`):
+
+```bash
+docker compose up -d db
+```
+
+**4. Aplicar las migraciones de Prisma**
+
+```bash
+npx prisma migrate deploy
+npm run db:verify        # opcional: comprueba la conexión Prisma↔PostgreSQL
+```
+
+**5. Cargar los seeds** (datos ficticios; el usuario solo se crea si no existe):
+
+```bash
+npm run db:seed          # usuario único + 3 propiedades ficticias (ejecutar una sola vez)
+# o bien, solo el usuario:
+npm run db:seed:user
+```
+
+**6. Iniciar la aplicación**
+
+```bash
+npm run dev              # http://localhost:3000 → redirige a /login
+```
+
+Inicia sesión con `SEED_USER_EMAIL` / `SEED_USER_PASSWORD`. Otros scripts: `npm run build`,
+`npm start`, `npm run lint`.
+
+**7. Ejecutar las pruebas**
+
+```bash
+npm test
+```
+
+Las pruebas unitarias no requieren base de datos. Las de integración **solo escriben en
+`TEST_DATABASE_URL`**, que debe apuntar a una base distinta de `DATABASE_URL` y
+`DIRECT_URL` (`tests/setup/test-db.ts` lo verifica); si no está definida o no puede
+comprobarse el aislamiento, esas pruebas se omiten. Para ejecutarlas, crea una base
+aparte —por ejemplo `docker compose exec db createdb -U realtytrack realtytrack_test`—,
+aplícale las migraciones con `DATABASE_URL` y `DIRECT_URL` apuntando a ella y define
+`TEST_DATABASE_URL` en `.env`. Resultado verificado en el desarrollo de T05:
+144 pruebas, 0 fallidas, 0 omitidas.
+
+**Estado funcional.** Implementado: acceso de usuario único (T12), propiedades (T01),
+crédito hipotecario (T02) y su registro mensual (T03), arrendatarios y contratos (T04),
+y montos, reajustes y pagos esperados (T05). **Pendiente del MVP:** abonos y estado del
+pago (T06), movimientos financieros (T07), aportes de capital (T08), dashboard mensual
+(T09), valor de la UF (T10), documentos (T11) y despliegue.
 
 ---
 
@@ -195,8 +266,9 @@ flowchart TB
     ST -->|"firma URLs"| S3
 ```
 
-*(Diagrama propuesto para el MVP; no implementado en Entrega 1. Fuente
-versionable: [docs/diagrams/architecture.mmd](docs/diagrams/architecture.mmd).)*
+*(Diagrama de la arquitectura del MVP: la aplicación, la API REST, Prisma/PostgreSQL y
+Auth.js están implementados; el almacenamiento de documentos, la API de la UF y el
+despliegue siguen siendo diseño propuesto. Fuente versionable: [docs/diagrams/architecture.mmd](docs/diagrams/architecture.mmd).)*
 
 RealtyTrack es una **aplicación full-stack única** —un repositorio, un
 despliegue, una base de datos—, organizada en cuatro capas (UI, API,
@@ -239,22 +311,25 @@ Detalle: [docs/architecture.md](docs/architecture.md) §3, §5.
 
 ```
 app/
-  (auth)/login/     pantalla de acceso
-  propiedades/      cartera, detalle de propiedad y su crédito (propiedades/[id]/credito)
-  contratos/        contratos, reajustes, pagos y abonos
-  dashboard/        flujo financiero mensual de cartera
-  api/              Route Handlers — API REST
+  (auth)/login/     pantalla de acceso                                  [implementado]
+  propiedades/      cartera, detalle, crédito y registro mensual,
+                    contratos y montos (propiedades/[id]/…)             [implementado]
+  api/              Route Handlers — API REST                           [implementado]
+  dashboard/        flujo financiero mensual de cartera                 [previsto]
 server/
-  domain/           funciones puras: reglas de negocio con precedencia
-  services/         orquestación, agregaciones mensuales y regla de caja
-  db/               Prisma Client y utilidades de consulta
-  uf/               puerto ProveedorUf e implementación
-  storage/          puerto AlmacenDocumentos e implementación
-  errors/           errores de dominio tipados
+  auth/             verificación de credenciales y sesión requerida     [implementado]
+  domain/           funciones puras: UF, vigencia de contrato, montos   [implementado]
+  schemas/          validación Zod por entidad                          [implementado]
+  services/         orquestación de propiedades, créditos, contratos    [implementado]
+  db/               Prisma Client                                       [implementado]
+  errors.ts         errores de dominio tipados → HTTP                   [implementado]
+  uf/, storage/     puertos de la UF y del object storage               [previstos]
 prisma/
   schema.prisma     esquema, espejo de docs/data-model.md
   migrations/       migraciones versionadas
-  seed.ts           carga inicial controlada y anonimizada
+  seed.ts           carga inicial ficticia (usuario + propiedades)
+tests/              unitarias e integración (node --test)
+openspec/           especificaciones y cambios archivados (Spec-Driven Development)
 ```
 
 La estructura sigue las capas de §2.2 (`docs/architecture.md` §5), no un
@@ -266,7 +341,8 @@ silencio (`docs/architecture.md` §6).
 
 ### **2.4. Infraestructura y despliegue**
 
-> Diseño propuesto; no existe despliegue real en Entrega 1.
+> Diseño propuesto; a la fecha no existe despliegue real (la aplicación se ejecuta en
+> local, sección 1.4).
 
 ```mermaid
 flowchart LR
@@ -293,31 +369,43 @@ Detalle: [docs/architecture.md](docs/architecture.md) §15.
 
 ### **2.5. Seguridad**
 
-Prácticas de seguridad **previstas** para el MVP, no implementadas en
-Entrega 1:
+**Implementado** (T12 y capas posteriores):
 
-- Acceso protegido con Auth.js: proveedor de credenciales, sesión JWT en
-  cookie `httpOnly` + `Secure` + `SameSite`.
-- Contraseña con hash Argon2id; verificación propia dentro del `authorize`
-  del proveedor —Auth.js no la cubre—.
-- Middleware de Next.js que protege toda ruta salvo la pantalla de acceso;
-  usuario único creado por seed, sin endpoint de registro.
+- Acceso protegido con Auth.js: proveedor de credenciales y sesión JWT.
+- Contraseña con hash Argon2 (`argon2`); verificación propia en
+  `server/auth/verify-credentials.ts`, con pruebas.
+- `proxy.ts` protege toda ruta salvo la pantalla de acceso y cada Route Handler exige
+  sesión (`requireSession`, 401 sin ella); usuario único creado por seed, sin endpoint
+  de registro.
+- Validación de entradas con Zod en el borde de la API y errores de dominio traducidos a
+  HTTP en un único punto (`server/errors.ts`).
+- Ningún secreto versionado: `.env*` está en `.gitignore` salvo `.env.example`.
+- Pruebas de integración aisladas: solo escriben en `TEST_DATABASE_URL`, distinta de la
+  base de desarrollo.
+
+**Previsto, no implementado:**
+
+- Atributos de cookie `httpOnly` + `Secure` + `SameSite` verificados en despliegue.
 - Bucket de documentos privado; el acceso es siempre por URL firmada de vida
   corta, nunca público.
-- Ningún secreto en el repositorio ni en el cliente: sin prefijo público de
-  Next.js en credenciales; `.env.local` nunca se versiona.
-- Validación de toda entrada en el borde de la API, antes de llegar a los
-  servicios.
-- Datos reales de las propiedades anonimizados antes de versionar (nombres,
-  RUT, direcciones, montos, documentos), cargados por un script de seed
-  controlado, no por un importador.
+- Sin prefijo público de Next.js en credenciales (regla de diseño aplicable a las
+  futuras variables del object storage y de la UF).
+
+**Regla de datos (vigente):** los datos reales de las propiedades se anonimizan antes de
+versionar (nombres, RUT, direcciones, montos, documentos) y se cargan por un script de
+seed controlado, no por un importador; el seed actual solo contiene datos ficticios.
 
 Detalle: [docs/architecture.md](docs/architecture.md) §11, §16.
 
 ### **2.6. Tests**
 
-> Entrega 1 documenta la estrategia de pruebas; no ejecuta tests ni aporta
-> evidencia de ejecución.
+> **Estado real:** hay pruebas automatizadas ejecutables con `npm test` (`node --test`):
+> **144 pruebas, 0 fallidas, 0 omitidas** en la última ejecución verificada (desarrollo
+> de T05), cubriendo unitarias de esquemas y dominio, integración de servicios contra
+> PostgreSQL de pruebas aislada, y control de acceso de la API (`tests/auth/proxy.test.ts`).
+> No hay pruebas extremo a extremo automatizadas ni de componentes de interfaz; la
+> interfaz se verificó manualmente. La tabla describe la estrategia completa, incluidos
+> los niveles aún no implementados.
 
 | Nivel | Qué cubriría | Por qué ahí |
 |---|---|---|
@@ -507,7 +595,9 @@ erDiagram
     MOVIMIENTO_FINANCIERO ||--o{ DOCUMENTO : "respaldado por"
 ```
 
-*(Modelo lógico propuesto; no implementado en Entrega 1. Fuente versionable:
+*(Modelo lógico del MVP: están en el esquema Prisma las entidades de propiedad, crédito y
+registro mensual, usuario, arrendatario, contrato, `contrato_monto` y `pago_esperado`; el
+resto (abonos, movimientos, aportes, documentos, UF) es diseño propuesto. Fuente versionable:
 [docs/diagrams/data-model.mmd](docs/diagrams/data-model.mmd).)*
 
 `USUARIO` y `VALOR_UF_PERIODO` no tienen relaciones: el primero solo guarda
@@ -586,8 +676,9 @@ uno ilustra una regla de diseño distinta del modelo: una operación de
 producto que orquesta varias escrituras, la frontera entre lo que se escribe
 y lo que se deriva, y la agregación mensual que respeta la regla de caja.
 
-Estos son los contratos propuestos para el MVP; no hay una API implementada
-en Entrega 1. Donde el detalle exacto de un campo no está fijado por
+Estos son los contratos del MVP. El endpoint 4.1 (T05) está **implementado y
+verificado**; los endpoints 4.2 (abonos, T06) y 4.3 (dashboard, T09) siguen siendo
+**contratos propuestos**, aún no implementados. Donde el detalle exacto de un campo no está fijado por
 `docs/architecture.md` o `docs/data-model.md`, se marca explícitamente como
 **contrato API propuesto de Entrega 1**, para no presentarlo como una
 decisión ya cerrada.
@@ -1003,9 +1094,9 @@ Ticket de origen, con el alcance full-stack completo:
 
 ## 7. Pull Requests
 
-Pendiente para las siguientes entregas. Entrega 1 es exclusivamente
-documental —no hay código de aplicación ni pull requests propias de este
-trabajo todavía—, coherente con `CLAUDE.md`. Las únicas fusiones visibles en
+Pendiente: no hay pull requests de este trabajo todavía. El desarrollo se versiona por
+commits en `feature/entrega-2-ESRF` (ver `git log`); la evidencia de PR se añadirá
+cuando se abra. Las únicas fusiones visibles en
 el historial de este repositorio (`#107`, `#111`) corresponden a trabajo de
 otros colaboradores sobre el repositorio base, ya revertido, y no son pull
 requests de esta entrega.

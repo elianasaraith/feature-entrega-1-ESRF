@@ -449,6 +449,10 @@ los mensajes de apply de T01 a T05 con las restricciones que se dieron a la IA.*
 
 > Implementa T05 siguiendo los artefactos aprobados de OpenSpec. Agrega UnprocessableError para HTTP 422; el PUT de contratos responde 409 únicamente cuando acortar fechaTermino deja fuera de vigencia montos registrados o pagos esperados existentes, sin bloquear modificaciones válidas. Un reajuste actualiza solo los montos esperados desde su período (y updated_at solo si el monto cambia) y no crea pagos; los pagos se generan con una sincronización explícita e idempotente, sin cron ni escrituras desde un GET, solo si existe un monto registrado. Mantén la interfaz obligatoria para registrar montos, reajustes y sincronizar. No implementes abonos, pagos recibidos ni movimientos financieros (T06 y T07). Reutiliza los servicios y el bloqueo por propiedad existentes, sin dependencias ni abstracciones nuevas. Antes de aplicar cualquier migración pide mi autorización; solo realtytrack_test primero. No modifiques .env ni hagas commit ni push.
 
+**T06 — abonos de arriendo y estado derivado (apply de `implement-rent-payments`):**
+
+> Implementa completamente el cambio OpenSpec implement-rent-payments: CRUD de abonos con endpoints anidados bajo propiedad, contrato y pago esperado; monto <= 0 y fecha futura responden 422; el estado, el saldo, la fecha de completitud y las calificaciones se recalculan siempre desde los abonos y nunca se persisten; borrado físico con confirmación en la UI; los abonos se conservan ante reajustes de T05. Aplica y verifica las migraciones primero en la base de pruebas aislada y después en la de desarrollo, comprobando el destino antes de cada operación. No hagas commit ni push ni operaciones destructivas; si aparece una decisión bloqueante, detente y consúltame.
+
 ---
 
 ### 7. Pull Requests

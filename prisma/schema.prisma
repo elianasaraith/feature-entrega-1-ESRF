@@ -161,7 +161,7 @@ model ContratoMonto {
 // Lo que se espera cobrar de un contrato en un mes (docs/data-model.md §4.8).
 // Solo se crea con la sincronización explícita (T05); `monto_esperado_clp` es un
 // snapshot del monto vigente que un reajuste actualiza. `periodo` es día 1
-// (CHECK en la migración). Sin estado ni abonos: son de T06.
+// (CHECK en la migración). Sin estado: es derivado de los abonos (T06).
 model PagoEsperado {
   id               String   @id @default(uuid()) @db.Uuid
   contratoId       String   @map("contrato_id") @db.Uuid
@@ -172,7 +172,27 @@ model PagoEsperado {
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   contrato ContratoArriendo @relation(fields: [contratoId], references: [id], onDelete: Restrict)
+  abonos   AbonoArriendo[]
 
   @@unique([contratoId, periodo])
   @@map("pago_esperado")
+}
+
+// Dinero efectivamente recibido contra un pago esperado (docs/data-model.md
+// §4.9). Sin tope sobre el monto esperado. Borrado físico. Estado, saldo y fecha
+// de completitud se derivan al consultar: nunca se persisten (T06).
+model AbonoArriendo {
+  id             String   @id @default(uuid()) @db.Uuid
+  pagoEsperadoId String   @map("pago_esperado_id") @db.Uuid
+  montoClp       Decimal  @map("monto_clp") @db.Decimal(14, 0)
+  fechaRecepcion DateTime @map("fecha_recepcion") @db.Date
+  medio          String?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  pagoEsperado PagoEsperado @relation(fields: [pagoEsperadoId], references: [id], onDelete: Restrict)
+
+  @@index([pagoEsperadoId])
+  @@index([fechaRecepcion])
+  @@map("abono_arriendo")
 }

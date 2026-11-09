@@ -14,9 +14,10 @@
 > **Nota sobre el estado del proyecto.** RealtyTrack ya tiene funcionalidades
 > implementadas: autenticación de usuario único (T12), propiedades (T01), créditos
 > hipotecarios y su registro mensual (T02, T03), contratos de arriendo (T04) y montos,
-> reajustes y pagos esperados (T05), con pruebas automatizadas ejecutadas y una interfaz
-> funcional para esas capacidades. **El MVP no está terminado**: siguen pendientes, entre
-> otros, abonos y estado del pago (T06), movimientos financieros (T07), aportes de capital
+> reajustes y pagos esperados (T05) y abonos con estado de pago derivado (T06), con pruebas
+> automatizadas y una interfaz para esas capacidades (el estado de verificación de T06 está
+> en `docs/work-tickets.md` §4.6). **El MVP no está terminado**: siguen pendientes, entre
+> otros, movimientos financieros (T07), aportes de capital
 > (T08), dashboard (T09), integración con la API de UF (T10) y documentos (T11), además del
 > despliegue. Lo que describen las secciones para esas capacidades es diseño propuesto; cada
 > sección distingue lo implementado de lo propuesto. El detalle técnico completo vive en
@@ -221,8 +222,8 @@ aplícale las migraciones con `DATABASE_URL` y `DIRECT_URL` apuntando a ella y d
 
 **Estado funcional.** Implementado: acceso de usuario único (T12), propiedades (T01),
 crédito hipotecario (T02) y su registro mensual (T03), arrendatarios y contratos (T04),
-y montos, reajustes y pagos esperados (T05). **Pendiente del MVP:** abonos y estado del
-pago (T06), movimientos financieros (T07), aportes de capital (T08), dashboard mensual
+montos, reajustes y pagos esperados (T05), y abonos con estado de pago derivado (T06).
+**Pendiente del MVP:** movimientos financieros (T07), aportes de capital (T08), dashboard mensual
 (T09), valor de la UF (T10), documentos (T11) y despliegue.
 
 ---
@@ -681,8 +682,9 @@ producto que orquesta varias escrituras, la frontera entre lo que se escribe
 y lo que se deriva, y la agregación mensual que respeta la regla de caja.
 
 Estos son los contratos del MVP. El endpoint 4.1 (T05) está **implementado y
-verificado**; los endpoints 4.2 (abonos, T06) y 4.3 (dashboard, T09) siguen siendo
-**contratos propuestos**, aún no implementados. Donde el detalle exacto de un campo no está fijado por
+verificado**; el 4.2 (abonos, T06) está **implementado** (verificado con 179 pruebas y revisión visual de la interfaz,
+`docs/work-tickets.md` §4.6); el 4.3 (dashboard, T09) sigue siendo un
+**contrato propuesto**, aún no implementado. Donde el detalle exacto de un campo no está fijado por
 `docs/architecture.md` o `docs/data-model.md`, se marca explícitamente como
 **contrato API propuesto de Entrega 1**, para no presentarlo como una
 decisión ya cerrada.
@@ -754,66 +756,70 @@ Respuesta `201`:
 Verificado: `npm test` (144 pruebas, 0 fallidas), TypeScript, lint y revisión manual de
 la interfaz de montos. El borrado y la edición de filas de monto no existen (405).
 
-### 4.2 `POST /api/pagos-esperados/{pagoEsperadoId}/abonos`
+### 4.2 `POST /api/propiedades/{propiedadId}/contratos/{contratoId}/pagos-esperados/{pagoId}/abonos`
 
-Registrar un abono contra un pago esperado. Inserta una fila en
-`abono_arriendo`; no escribe ningún estado — el estado del pago se deriva en
-la respuesta a partir del monto esperado, los abonos y la fecha de
-referencia (`docs/data-model.md` §6.1; `docs/architecture.md` §19).
+Registrar un abono contra un pago esperado (T06, **implementado**; ver el estado de
+verificación en `docs/work-tickets.md` §4.6). Inserta una fila en `abono_arriendo`; no
+escribe ningún estado: el estado, el saldo y la fecha de completitud se derivan al
+consultar `GET .../contratos/{contratoId}/pagos-esperados` a partir del monto esperado,
+los abonos y la fecha de referencia en Chile (`docs/data-model.md` §6.1). La misma ruta
+base admite `GET` (listar) y, sobre `.../abonos/{abonoId}`, `PUT` (editar monto, fecha y
+medio) y `DELETE` (borrado físico, 204). La validación de pertenencia propiedad →
+contrato → pago → abono responde 404 ante cualquier id que no coincida.
 
 ```yaml
 paths:
-  /api/pagos-esperados/{pagoEsperadoId}/abonos:
+  /api/propiedades/{propiedadId}/contratos/{contratoId}/pagos-esperados/{pagoId}/abonos:
     post:
       summary: Registrar un abono contra un pago esperado
       parameters:
-        - name: pagoEsperadoId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
+        - { name: propiedadId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: contratoId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: pagoId, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [monto_clp, fecha_recepcion]
+              required: [montoClp, fechaRecepcion]
               properties:
-                monto_clp: { type: string, description: "CLP, > 0, sin tope frente al monto esperado; representación sin pérdida (docs/architecture.md §9.1)" }
-                fecha_recepcion: { type: string, format: date }
+                montoClp: { type: string, description: "CLP entero, > 0 (si no, 422); sin tope frente al monto esperado" }
+                fechaRecepcion: { type: string, format: date, description: "No puede ser futura (422)" }
                 medio: { type: string, nullable: true }
       responses:
-        "201": { description: "Abono registrado, con el estado derivado del pago tras aplicarlo" }
-        "400": { description: "Entrada inválida" }
-        "404": { description: "Pago esperado inexistente" }
+        "201": { description: "Abono registrado" }
+        "400": { description: "Formato inválido" }
+        "401": { description: "Sin sesión" }
+        "404": { description: "Propiedad, contrato o pago esperado inexistente o ajeno" }
+        "422": { description: "Monto menor o igual a 0 o fecha de recepción futura" }
 ```
 
 Ejemplo:
 
-`POST /api/pagos-esperados/9c1e.../abonos`
+`POST /api/propiedades/7f3a.../contratos/c1d2.../pagos-esperados/9c1e.../abonos`
 
 ```json
-{ "monto_clp": "300000", "fecha_recepcion": "2026-03-03", "medio": "transferencia" }
+{ "montoClp": "300000", "fechaRecepcion": "2026-03-03", "medio": "transferencia" }
 ```
 
 Respuesta `201`:
 
 ```json
 {
-  "abono": { "id": "...", "monto_clp": "300000", "fecha_recepcion": "2026-03-03" },
-  "pago_esperado": {
-    "monto_esperado_clp": "600000",
-    "monto_recibido_clp": "300000",
-    "estado": "PARCIALMENTE_PAGADO",
-    "calificacion": null
-  }
+  "id": "...",
+  "pagoEsperadoId": "9c1e...",
+  "montoClp": "300000",
+  "fechaRecepcion": "2026-03-03",
+  "medio": "transferencia",
+  "createdAt": "...",
+  "updatedAt": "..."
 }
 ```
 
-Devolver el pago junto al abono es **contrato API propuesto de Entrega 1**;
-lo confirmado por los documentos fuente es que `estado` y
-`monto_recibido_clp` son campos derivados, nunca columnas
-(`docs/data-model.md` §6, §6.1).
+El estado derivado (`PENDIENTE` · `PARCIALMENTE_PAGADO` · `VENCIDO` · `PAGADO`, con
+`recibidoClp`, `saldoPendienteClp`, `fechaCompletitud` y las calificaciones) se obtiene
+con el `GET` del listado de pagos; nunca es una columna (`docs/data-model.md` §6, §6.1).
 
 ### 4.3 `GET /api/dashboard?periodo=YYYY-MM`
 

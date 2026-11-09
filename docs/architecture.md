@@ -315,7 +315,7 @@ Las capacidades que la API debe cubrir se derivan de `product.md` §5 y de las h
 | Gestión de propiedades | Alta, consulta y edición de una propiedad y sus datos de compra |
 | Gestión del crédito | Registrar el crédito de una propiedad; registrar el dividendo pagado y el saldo de una mensualidad; consultar la serie histórica |
 | Contratos y arriendos | Registrar un contrato con su arrendatario; **registrar un reajuste**; consultar el histórico de contratos y montos |
-| Pagos de arriendo | Consultar los pagos esperados de un período con su estado derivado; **registrar un abono** |
+| Pagos de arriendo | Consultar los pagos esperados de un contrato con su estado derivado; **registrar, listar, editar y eliminar abonos** (rutas anidadas bajo propiedad → contrato → pago esperado, T06) |
 | Egresos y aportes | Registrar y consultar movimientos financieros y aportes de capital, con el vínculo opcional entre ellos |
 | Documentos | Obtener una URL de subida, registrar la metadata, listar y obtener una URL de lectura |
 | Consulta financiera | Dashboard mensual de cartera y vista mensual de una propiedad |
@@ -725,7 +725,7 @@ sequenceDiagram
     rect rgb(240, 245, 250)
     note over U,P: Escritura — se registra un hecho
     U->>C: registra un abono
-    C->>R: POST /api/abonos
+    C->>R: POST /api/propiedades/{id}/contratos/{cid}/pagos-esperados/{pid}/abonos
     R->>R: validar y autenticar
     R->>S: registrarAbono(pagoId, monto, fecha)
     S->>P: INSERT en abono_arriendo

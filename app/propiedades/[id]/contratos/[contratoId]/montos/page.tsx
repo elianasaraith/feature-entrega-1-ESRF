@@ -42,6 +42,11 @@ async function Montos({ params }: { params: Promise<{ id: string; contratoId: st
       <p className="mb-4 text-sm">
         Contrato de {contrato.arrendatario.nombre}, {contrato.fechaInicio} a {contrato.fechaTermino}.
       </p>
+      <p className="mb-4 text-sm">
+        <Link href={`/propiedades/${propiedad.id}/contratos/${contrato.id}/pagos`} className="underline">
+          Ver pagos y abonos →
+        </Link>
+      </p>
       <MontosPanel
         propiedadId={propiedad.id}
         contratoId={contrato.id}

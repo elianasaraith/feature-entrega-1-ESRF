@@ -425,6 +425,39 @@ bloqueante).
 - Junto con T05, es el candidato más claro para ilustrar "lógica de negocio en servicios
   testeables, sin cálculo financiero en componentes" (`CLAUDE.md`).
 
+**Estado de implementación (T06, cambio OpenSpec `implement-rent-payments`).**
+Implementado y verificado: pruebas automatizadas, migración en pruebas y desarrollo, y revisión visual de la interfaz (ver abajo).
+- *Abonos:* CRUD bajo `/api/propiedades/{id}/contratos/{cid}/pagos-esperados/{pid}/abonos`
+  (`GET`, `POST`) y `.../abonos/{abonoId}` (`PUT`, `DELETE`). Monto <= 0 y fecha de
+  recepción futura → 422; formato inválido → 400; cualquier id que no pertenezca a la
+  cadena propiedad → contrato → pago → abono → 404. La edición reemplaza monto, fecha y
+  medio y no mueve el abono a otro pago. La eliminación es **física**, sin papelera ni
+  auditoría (`data-model.md`, «Borrado»), con confirmación en la interfaz.
+- *Estado derivado:* `GET .../contratos/{cid}/pagos-esperados` devuelve cada pago con
+  recibido, saldo pendiente, estado, fecha de completitud y las dos calificaciones,
+  calculados por la función pura `calcularEstadoPago` con «hoy» de Chile inyectado. Nada
+  de eso se persiste; no escribe ni sincroniza.
+- *Reajustes:* conservan los abonos; el estado se deriva sobre el monto esperado vigente.
+- *Interfaz:* `/propiedades/[id]/contratos/[contratoId]/pagos` (listar, registrar, editar
+  y eliminar abonos), enlazada desde la lista de contratos y desde montos.
+- *Seed:* no se amplió con abonos (decisión del usuario): el seed no crea contratos ni pagos y queda fuera de T06; no aplicable.
+- *Migración:* `20261101120000_add_abono_arriendo` (tabla, índices y `CHECK (monto_clp > 0)`).
+- *Verificado:* migración `20261101120000_add_abono_arriendo` aplicada a la base de pruebas
+  aislada; suite completa con `npm test`: 179 pruebas, 0 fallidas, 0 omitidas (incluye las
+  13 de integración de `tests/pagos/pago-service.integration.test.ts`, las 16 de dominio y
+  las 6 de esquema y HTTP, y las de T04 y T05 sin regresiones); TypeScript, lint y
+  `openspec validate` sin errores. La suite la ejecutó el usuario en su terminal; TypeScript,
+  lint y OpenSpec, en esta sesión.
+- *Verificación manual (usuario):* migración confirmada también en la base de desarrollo
+  `realtytrack`; revisión visual de `/propiedades/[id]/contratos/[contratoId]/pagos`:
+  listado de pagos, registro, edición y eliminación con confirmación, con actualización de
+  estados y saldos.
+- *Limitación:* el 401 de las rutas nuevas lo cubre el `proxy.ts` global para `/api/*`, como
+  en T04 y T05; no hay prueba específica por ruta porque `requireSession` solo funciona en
+  el runtime de Next.js.
+
+---
+
 ---
 
 ### 4.7 T07 — Movimientos financieros (egresos e inversiones)

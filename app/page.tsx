@@ -18,6 +18,9 @@ export default function Home() {
       <p>
         <Link href="/propiedades">Propiedades</Link>
       </p>
+      <p>
+        <Link href="/dashboard">Dashboard financiero</Link>
+      </p>
       <LogoutButton />
     </main>
   );

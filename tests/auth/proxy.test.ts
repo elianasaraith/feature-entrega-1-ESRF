@@ -98,6 +98,33 @@ test("API de pagos esperados y abonos sin sesión responde 401 JSON", async () =
   }
 });
 
+test("API de movimientos financieros sin sesión responde 401 JSON", async () => {
+  const id = "00000000-0000-4000-8000-000000000000";
+  const movimientos = `/api/propiedades/${id}/movimientos`;
+  const casos: [string, string[]][] = [
+    [movimientos, ["GET", "POST"]],
+    [`${movimientos}/${id}`, ["GET", "PUT", "DELETE"]],
+  ];
+  for (const [ruta, metodos] of casos) {
+    for (const method of metodos) {
+      const request = new NextRequest(new URL(`http://localhost:3000${ruta}`), { method });
+      const response = await (proxy as unknown as ProxyFn)(request);
+      assert.equal(response?.status, 401, `${method} ${ruta}`);
+      assert.deepEqual(await response?.json(), { error: "No autenticado" });
+    }
+  }
+});
+
+test("API del dashboard y resumen mensual sin sesión responde 401 JSON", async () => {
+  const id = "00000000-0000-4000-8000-000000000000";
+  for (const ruta of ["/api/dashboard", "/api/dashboard?mes=2026-03", `/api/propiedades/${id}/resumen-mensual`]) {
+    const request = new NextRequest(new URL(`http://localhost:3000${ruta}`));
+    const response = await (proxy as unknown as ProxyFn)(request);
+    assert.equal(response?.status, 401, ruta);
+    assert.deepEqual(await response?.json(), { error: "No autenticado" });
+  }
+});
+
 test("API sin sesión responde 401 JSON sin redirigir", async () => {
   const request = new NextRequest(new URL("http://localhost:3000/api/propiedades"));
   const response = await (proxy as unknown as ProxyFn)(request);

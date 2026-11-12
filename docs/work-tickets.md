@@ -504,6 +504,38 @@ dividendo hipotecario (T03); agregación mensual y flujo neto (T09).
   del enum.
 - API: 201 en alta válida.
 
+**Estado de implementación (T07, cambio OpenSpec `t07-movimientos-financieros`).**
+Implementado y verificado: pruebas automatizadas, build, migración en pruebas y desarrollo, y revisión visual de la interfaz (ver abajo).
+- *CRUD:* `GET`, `POST` en `/api/propiedades/{id}/movimientos` y `GET`, `PUT`, `DELETE` en
+  `.../movimientos/{movId}`. Formato inválido o categoría fuera del enum (incluida
+  `DIVIDENDO`) → 400; monto <= 0 o fecha futura (referencia `hoyChile()`, hoy se acepta) →
+  422; propiedad o movimiento que no pertenece a ella → 404. Borrado **físico** con
+  confirmación en la interfaz. Sin columna `tipo`.
+- *Agregación:* función pura `agregarPorCategoria` (total y 7 categorías, aritmética
+  `bigint`) y `rangoDelMes`; `GET` sin `mes` cubre todo el historial y con `?mes=YYYY-MM`
+  solo ese mes. `resumenMensual` queda como punto de entrada para T09.
+- *Interfaz:* `/propiedades/[id]/movimientos` (filtro mensual, total, desglose, alta,
+  edición y eliminación), enlazada desde el detalle de la propiedad.
+- *Migración:* `20261109120000_add_movimiento_financiero` (enum, tabla, índice
+  `(propiedad_id, fecha)` y `CHECK (monto_clp > 0)`), generada con `prisma migrate diff`
+  sin conexión; la aplicó el usuario desde su terminal (ver verificación manual).
+- *Verificado en esta sesión:* TypeScript y lint sin errores; 18 pruebas sin base
+  (esquema, agregación y 401 de `proxy.ts`) pasan.
+- *Verificación manual (usuario):* migración aplicada en `realtytrack_test` y en
+  `realtytrack` (declarado por el usuario); revisión visual de
+  `/propiedades/[id]/movimientos`: registro, edición, eliminación con confirmación y
+  actualización de los datos mostrados.
+- *Verificado:* suite completa con `npm test` (ejecutada por el usuario): 199 pruebas,
+  199 aprobadas, 0 fallidas, 0 omitidas (sin omisiones, por lo que las de integración de
+  `tests/movimientos/movimiento-service.integration.test.ts` —CRUD, pertenencia, filtro
+  mensual, no duplicación de dividendos y `CHECK`— se ejecutaron contra la base de pruebas);
+  `npm run build` compila y lista las rutas `/api/propiedades/[id]/movimientos`,
+  `.../movimientos/[movId]` y `/propiedades/[id]/movimientos`; TypeScript, lint y
+  `openspec validate` sin errores.
+- *Limitación:* como en T06, el 401 de las rutas nuevas lo cubre el `proxy.ts` global
+  (prueba en `tests/auth/proxy.test.ts`); `requireSession` solo funciona en el runtime de
+  Next.js.
+
 ---
 
 ### 4.8 T08 — Aportes de capital
@@ -609,6 +641,49 @@ presenta); comparación entre propiedades y proyecciones financieras (`product.m
   fecha, no del período (`data-model.md` §7.3).
 - Es el ticket que más se apoya en el nivel de integración de la pirámide de
   `architecture.md` §18, porque exige PostgreSQL real para verificar la agregación.
+
+**Estado de implementación (T09, cambio OpenSpec `t09-dashboard-financiero`).**
+Implementado y verificado: suite completa, build y revisión manual (ver abajo); sin pruebas HTTP automatizadas de 200 y 404. Sin migraciones ni tablas nuevas.
+- *Servicio único:* `dashboardService` (`resumenMensual` de cartera, `resumenPropiedad`).
+  Totales por fecha de caja: ingresos por `fecha_recepcion`, dividendos por
+  `fecha_pago_dividendo`, otros egresos por `fecha` (T07), aritmética `bigint`. El total de
+  cartera es la suma de las filas por propiedad. Una consulta por tabla, sin N+1; el
+  agrupado por propiedad se hace en TypeScript (los abonos y dividendos requieren dos saltos
+  de relación) y los movimientos se leen como filas porque también alimentan la actividad.
+- *Estado de pagos:* pagos esperados del `periodo` contractual del mes, con
+  `calcularEstadoPago` de T06 y «hoy» de Chile; cuenta todos los abonos del pago aunque se
+  hayan recibido en otro mes.
+- *Saldo UF:* último `saldo_pendiente_uf` con `periodo` <= mes consultado (nunca
+  posteriores); sin registro se muestra «Sin saldo registrado», no 0.
+- *Endpoints:* `GET /api/dashboard?mes=YYYY-MM` y `GET /api/propiedades/{id}/resumen-mensual?mes=`;
+  `mes` inválido → 400, propiedad inexistente → 404, sin sesión → 401; sin `mes`, mes actual
+  de Chile.
+- *Interfaz:* `/dashboard` (selector mensual, flujo del mes, estados de pagos, resumen por
+  propiedad en el orden de `propiedadService.listar`, sin ranking) y `/propiedades/[id]`
+  con datos → resumen del mes → actividad reciente (abonos, dividendos y movimientos, fecha
+  descendente, desempate por origen e id, con enlaces) → accesos. Enlace desde `app/page.tsx`.
+- *Dependencias futuras, no incluidas:* aportes de capital y aportes acumulados (**T08**) y
+  equivalente en CLP del saldo en UF y AC4 (**T10**). La interfaz no muestra cifras ni ceros
+  para ellos; el flujo neto es «antes de aportes».
+- *Verificación (resultados reales):* TypeScript y lint sin errores y `openspec validate`
+  válido (ejecutados en la sesión de desarrollo). El usuario confirmó desde su terminal local
+  que `npm test` terminó correctamente y que `npm run build` terminó correctamente (el build
+  falló antes por `hoyChile()` en prerenderizado y se corrigió leyendo `searchParams` antes).
+  Revisión manual satisfactoria de `/dashboard` y `/propiedades/[id]`, incluido el registro,
+  edición y eliminación de movimientos: los totales y el resumen se actualizan al volver a
+  las vistas sin recarga manual ni cambios adicionales (no hizo falta `router.refresh()` ni
+  `revalidatePath`).
+- *Limitación de pruebas HTTP:* **no existen pruebas HTTP automatizadas para 200 y 404** de
+  `GET /api/dashboard` y `GET /api/propiedades/{id}/resumen-mensual`. Los handlers dependen
+  de `auth()`, que solo funciona dentro del runtime de Next.js, y el proyecto no tiene
+  patrón de prueba de handlers ni de simulación de sesión; probarlos exigiría refactorizar la
+  autenticación o añadir tooling. Cobertura real: 404 en el servicio (`resumenPropiedad`),
+  400 (`mes` inválido) y 401 automatizados, y 200 por revisión manual (el usuario probó los endpoints a mano y funcionaron correctamente).
+- *Pruebas automatizadas (resultado real de `npm test`, terminal del usuario):* 218 pruebas,
+  218 aprobadas, 0 fallidas, 0 canceladas, **0 omitidas**; incluye las 11 de integración de
+  `tests/dashboard/dashboard-service.integration.test.ts` contra PostgreSQL real (desfase de
+  abono y de dividendo, mes vacío y futuro, aislamiento, cartera = suma de propiedades,
+  estados de pago, saldo por período, actividad descendente).
 
 ---
 

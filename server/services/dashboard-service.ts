@@ -1,0 +1,266 @@
+import type { PrismaClient } from "@prisma/client";
+import { calcularEstadoPago, ordenarAbonos } from "@/server/domain/pago-estado";
+import type { EstadoPago } from "@/server/domain/pago-estado";
+import { rangoDelMes } from "@/server/domain/movimiento-agregacion";
+import {
+  type ActividadEntrada,
+  flujoNeto,
+  ordenarActividad,
+  seleccionarSaldoAplicable,
+  sumarMontos,
+} from "@/server/domain/dashboard";
+import { asegurarPropiedad } from "./propiedad-lookup";
+
+// Totales de caja del mes (docs/data-model.md §7.1): ingresos por
+// fecha_recepcion, dividendos por fecha_pago_dividendo y otros egresos por
+// fecha. El período contractual o hipotecario nunca interviene. Aportes de
+// capital (T08) y equivalentes en CLP de la UF (T10) quedan fuera.
+export type TotalesDto = {
+  ingresosClp: string;
+  dividendosClp: string;
+  otrosEgresosClp: string;
+  egresosTotalesClp: string;
+  flujoNetoClp: string;
+};
+
+export type PagoMesDto = {
+  id: string;
+  propiedadId: string;
+  contratoId: string;
+  periodo: string; // YYYY-MM contractual
+  montoEsperadoClp: string;
+  recibidoClp: string;
+  saldoPendienteClp: string;
+  estado: EstadoPago;
+  vencidoConAbonosParciales: boolean;
+  pagadoConAtraso: boolean;
+};
+
+export type SaldoCreditoDto = { periodo: string; saldoPendienteUf: string };
+
+export type ActividadDto = ActividadEntrada & { propiedadId: string; href: string };
+
+export type PropiedadResumenDto = TotalesDto & {
+  propiedadId: string;
+  numeroDepartamento: string;
+  // null = sin crédito o sin registro con saldo hasta el mes consultado.
+  saldoCredito: SaldoCreditoDto | null;
+  pagos: PagoMesDto[];
+};
+
+export type ResumenMensualDto = {
+  mes: string;
+  totales: TotalesDto;
+  propiedades: PropiedadResumenDto[];
+};
+
+export type ResumenPropiedadDto = PropiedadResumenDto & {
+  mes: string;
+  actividad: ActividadDto[];
+};
+
+const ETIQUETA_CATEGORIA: Record<string, string> = {
+  REPARACION: "Reparación",
+  EQUIPAMIENTO: "Equipamiento",
+  SEGURO: "Seguro",
+  CONTRIBUCIONES: "Contribuciones",
+  GASTO_COMUN: "Gasto común",
+  GASTO_EXTRAORDINARIO: "Gasto extraordinario",
+  OTRO: "Otro",
+};
+
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+const aFecha = (f: string) => new Date(`${f}T00:00:00.000Z`);
+
+function totales(ingresos: string[], dividendos: string[], otros: string[]): TotalesDto {
+  const ingresosClp = sumarMontos(ingresos);
+  const dividendosClp = sumarMontos(dividendos);
+  const otrosEgresosClp = sumarMontos(otros);
+  const egresosTotalesClp = sumarMontos([dividendosClp, otrosEgresosClp]);
+  return {
+    ingresosClp,
+    dividendosClp,
+    otrosEgresosClp,
+    egresosTotalesClp,
+    flujoNetoClp: flujoNeto(ingresosClp, egresosTotalesClp),
+  };
+}
+
+// Un solo servicio para cartera y propiedad (architecture.md §10.4). Solo
+// lectura: no escribe ni persiste ningún derivado. Las filas del mes se
+// consultan una vez por tabla (sin N+1) y se agrupan por propiedad con bigint.
+export function createDashboardService(prisma: PrismaClient) {
+  async function calcular(mes: string, hoy: string, propiedadId?: string) {
+    const { desde, hasta } = rangoDelMes(mes);
+    const rango = { gte: aFecha(desde), lt: aFecha(hasta) };
+
+    const propiedades = await prisma.propiedad.findMany({
+      where: propiedadId ? { id: propiedadId } : undefined,
+      select: { id: true, numeroDepartamento: true },
+      orderBy: [{ createdAt: "asc" }, { numeroDepartamento: "asc" }],
+    });
+    const ids = propiedades.map((p) => p.id);
+    const deLaCartera = { in: ids };
+
+    const [abonos, dividendos, movimientos, pagos, saldos] = await Promise.all([
+      prisma.abonoArriendo.findMany({
+        where: { fechaRecepcion: rango, pagoEsperado: { contrato: { propiedadId: deLaCartera } } },
+        include: { pagoEsperado: { select: { periodo: true, contrato: { select: { id: true, propiedadId: true } } } } },
+      }),
+      prisma.creditoRegistroMensual.findMany({
+        where: {
+          fechaPagoDividendo: rango,
+          dividendoPagadoClp: { not: null },
+          credito: { propiedadId: deLaCartera },
+        },
+        include: { credito: { select: { propiedadId: true } } },
+      }),
+      prisma.movimientoFinanciero.findMany({
+        where: { propiedadId: deLaCartera, fecha: rango },
+      }),
+      // Período contractual: el estado se deriva sobre TODOS los abonos del pago.
+      prisma.pagoEsperado.findMany({
+        where: { periodo: aFecha(desde), contrato: { propiedadId: deLaCartera } },
+        include: { abonos: true, contrato: { select: { propiedadId: true } } },
+        orderBy: { createdAt: "asc" },
+      }),
+      // Último registro con saldo por crédito, hasta el mes consultado inclusive.
+      prisma.creditoRegistroMensual.findMany({
+        where: {
+          saldoPendienteUf: { not: null },
+          periodo: { lt: aFecha(hasta) },
+          credito: { propiedadId: deLaCartera },
+        },
+        orderBy: { periodo: "desc" },
+        distinct: ["creditoId"],
+        include: { credito: { select: { propiedadId: true } } },
+      }),
+    ]);
+
+    const actividadPorPropiedad = new Map<string, ActividadDto[]>();
+    const agregar = (a: ActividadDto) => {
+      const lista = actividadPorPropiedad.get(a.propiedadId) ?? [];
+      lista.push(a);
+      actividadPorPropiedad.set(a.propiedadId, lista);
+    };
+    for (const a of abonos) {
+      const pid = a.pagoEsperado.contrato.propiedadId;
+      agregar({
+        id: a.id,
+        origen: "ABONO",
+        fecha: isoDate(a.fechaRecepcion),
+        concepto: `Arriendo ${isoDate(a.pagoEsperado.periodo).slice(0, 7)}`,
+        montoClp: a.montoClp.toString(),
+        propiedadId: pid,
+        href: `/propiedades/${pid}/contratos/${a.pagoEsperado.contrato.id}/pagos`,
+      });
+    }
+    for (const d of dividendos) {
+      const pid = d.credito.propiedadId;
+      agregar({
+        id: d.id,
+        origen: "DIVIDENDO",
+        fecha: isoDate(d.fechaPagoDividendo as Date),
+        concepto: `Dividendo ${isoDate(d.periodo).slice(0, 7)}`,
+        montoClp: (d.dividendoPagadoClp as { toString(): string }).toString(),
+        propiedadId: pid,
+        href: `/propiedades/${pid}/credito/registro-mensual`,
+      });
+    }
+    for (const m of movimientos) {
+      agregar({
+        id: m.id,
+        origen: "MOVIMIENTO",
+        fecha: isoDate(m.fecha),
+        concepto: m.descripcion ?? ETIQUETA_CATEGORIA[m.categoria] ?? m.categoria,
+        montoClp: m.montoClp.toString(),
+        propiedadId: m.propiedadId,
+        href: `/propiedades/${m.propiedadId}/movimientos?mes=${mes}`,
+      });
+    }
+
+    const pagosPorPropiedad = new Map<string, PagoMesDto[]>();
+    for (const p of pagos) {
+      const pid = p.contrato.propiedadId;
+      const abonosEntrada = ordenarAbonos(
+        p.abonos.map((a) => ({
+          id: a.id,
+          montoClp: a.montoClp.toString(),
+          fechaRecepcion: isoDate(a.fechaRecepcion),
+          createdAt: a.createdAt.toISOString(),
+        }))
+      );
+      const montoEsperadoClp = p.montoEsperadoClp.toString();
+      const calc = calcularEstadoPago(
+        { montoEsperadoClp, fechaEsperada: isoDate(p.fechaEsperada), abonos: abonosEntrada },
+        hoy
+      );
+      const lista = pagosPorPropiedad.get(pid) ?? [];
+      lista.push({
+        id: p.id,
+        propiedadId: pid,
+        contratoId: p.contratoId,
+        periodo: isoDate(p.periodo).slice(0, 7),
+        montoEsperadoClp,
+        recibidoClp: calc.recibidoClp,
+        saldoPendienteClp: calc.saldoPendienteClp,
+        estado: calc.estado,
+        vencidoConAbonosParciales: calc.vencidoConAbonosParciales,
+        pagadoConAtraso: calc.pagadoConAtraso,
+      });
+      pagosPorPropiedad.set(pid, lista);
+    }
+
+    const saldosPorPropiedad = new Map<string, SaldoCreditoDto | null>();
+    for (const s of saldos) {
+      saldosPorPropiedad.set(
+        s.credito.propiedadId,
+        seleccionarSaldoAplicable(
+          [{ periodo: isoDate(s.periodo).slice(0, 7), saldoPendienteUf: s.saldoPendienteUf?.toString() ?? null }],
+          mes
+        )
+      );
+    }
+
+    const filas: PropiedadResumenDto[] = propiedades.map((p) => {
+      const act = actividadPorPropiedad.get(p.id) ?? [];
+      const de = (origen: ActividadDto["origen"]) =>
+        act.filter((a) => a.origen === origen).map((a) => a.montoClp);
+      return {
+        propiedadId: p.id,
+        numeroDepartamento: p.numeroDepartamento,
+        ...totales(de("ABONO"), de("DIVIDENDO"), de("MOVIMIENTO")),
+        saldoCredito: saldosPorPropiedad.get(p.id) ?? null,
+        pagos: pagosPorPropiedad.get(p.id) ?? [],
+      };
+    });
+    return { filas, actividadPorPropiedad };
+  }
+
+  return {
+    // Cartera: el total es la suma de las filas por propiedad, en el orden
+    // estable de propiedadService.listar (sin ranking).
+    async resumenMensual(mes: string, hoy: string): Promise<ResumenMensualDto> {
+      const { filas } = await calcular(mes, hoy);
+      return {
+        mes,
+        totales: totales(
+          filas.map((f) => f.ingresosClp),
+          filas.map((f) => f.dividendosClp),
+          filas.map((f) => f.otrosEgresosClp)
+        ),
+        propiedades: filas,
+      };
+    },
+
+    async resumenPropiedad(propiedadId: string, mes: string, hoy: string): Promise<ResumenPropiedadDto> {
+      await asegurarPropiedad(prisma, propiedadId);
+      const { filas, actividadPorPropiedad } = await calcular(mes, hoy, propiedadId);
+      return {
+        mes,
+        ...filas[0],
+        actividad: ordenarActividad(actividadPorPropiedad.get(propiedadId) ?? []),
+      };
+    },
+  };
+}

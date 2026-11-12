@@ -1,0 +1,134 @@
+## ADDED Requirements
+
+### Requirement: Totales mensuales por regla de caja
+El sistema SHALL calcular, para un mes `YYYY-MM`, los ingresos recibidos como la suma de `abono_arriendo.monto_clp` con `fecha_recepcion` en el mes; los dividendos pagados como la suma de `credito_registro_mensual.dividendo_pagado_clp` con `fecha_pago_dividendo` en el mes; y los otros egresos como la suma de `movimiento_financiero.monto_clp` con `fecha` en el mes. Los egresos totales SHALL ser dividendos más otros egresos, y el flujo neto antes de aportes SHALL ser ingresos menos egresos totales, pudiendo ser negativo. Todos los importes SHALL ser CLP enteros operados sin `Number` (BigInt o Decimal). `periodo` y `pago_esperado.periodo` SHALL NOT intervenir en estos totales. No SHALL persistirse ningún total derivado.
+
+#### Scenario: Flujo neto negativo
+- **WHEN** un mes tiene 500.000 de ingresos y 650.000 de egresos
+- **THEN** el flujo neto antes de aportes es −150.000
+
+#### Scenario: Abono cobrado en mes distinto al contractual
+- **WHEN** el pago esperado de marzo recibe un abono con `fecha_recepcion` en abril
+- **THEN** el abono suma a los ingresos de abril y no a los de marzo
+
+#### Scenario: Dividendo pagado en mes distinto al período
+- **WHEN** el registro con `periodo` marzo tiene `fecha_pago_dividendo` en abril
+- **THEN** el dividendo suma a los dividendos de abril y no a los de marzo
+
+#### Scenario: Registro sin dividendo
+- **WHEN** un registro mensual solo tiene saldo y no tiene dividendo ni fecha de pago
+- **THEN** no aporta a los dividendos de ningún mes
+
+#### Scenario: Mes sin operaciones
+- **WHEN** se consulta un mes sin abonos, dividendos ni movimientos
+- **THEN** ingresos, dividendos, otros egresos, egresos totales y flujo neto son 0, sin error
+
+#### Scenario: Mes futuro
+- **WHEN** se consulta un mes posterior al actual
+- **THEN** la respuesta es válida con los datos existentes de ese mes, normalmente en cero
+
+#### Scenario: Edición o eliminación
+- **WHEN** se edita o elimina un abono o un movimiento del mes
+- **THEN** la siguiente consulta del mes refleja el cambio
+
+#### Scenario: Sin duplicación
+- **WHEN** un mes tiene un dividendo registrado en T03 y movimientos en T07
+- **THEN** el dividendo se cuenta una sola vez, solo desde el registro mensual del crédito
+
+### Requirement: Dashboard de cartera
+El sistema SHALL ofrecer `GET /api/dashboard?mes=YYYY-MM` y la página `/dashboard` con los totales mensuales de toda la cartera, el estado de pagos esperados del mes, el saldo de créditos en UF y un resumen por propiedad. El total de cartera SHALL ser igual a la suma de los totales de cada propiedad. Sin `mes`, SHALL usarse el mes de `hoyChile()`. El dashboard SHALL NOT ordenar, puntuar ni comparar propiedades entre sí; el resumen por propiedad SHALL listarse en un orden estable no basado en cifras y enlazar a su detalle. No SHALL mostrar aportes de capital ni equivalentes en CLP de saldos UF.
+
+#### Scenario: Total igual a suma de propiedades
+- **WHEN** hay varias propiedades con movimientos en el mes
+- **THEN** cada total de cartera iguala la suma del mismo total en las propiedades
+
+#### Scenario: Aislamiento por propiedad
+- **WHEN** solo la propiedad A tiene operaciones en el mes
+- **THEN** la propiedad B figura con importes en 0 y no se le atribuyen operaciones de A
+
+#### Scenario: Mes por defecto
+- **WHEN** se consulta sin `mes`
+- **THEN** se usa el mes de `hoyChile()`
+
+#### Scenario: Mes inválido
+- **WHEN** `mes` no cumple `YYYY-MM` con mes 01–12
+- **THEN** el endpoint responde 400
+
+#### Scenario: Sin sesión
+- **WHEN** se llama al endpoint sin sesión
+- **THEN** responde 401 y no devuelve datos
+
+#### Scenario: Sin comparación
+- **WHEN** se consulta el dashboard
+- **THEN** no existe ranking, puntaje ni indicador que ordene propiedades por rendimiento
+
+#### Scenario: Integraciones pendientes
+- **WHEN** se muestra el dashboard
+- **THEN** los aportes de capital y el saldo en CLP no aparecen como cifras, y se indica que quedan para T08 y T10
+
+### Requirement: Estado de pagos esperados del mes contractual
+El sistema SHALL presentar los pagos esperados cuyo `pago_esperado.periodo` es el mes consultado, con monto esperado, recibido, saldo pendiente, estado (`PENDIENTE`, `PARCIALMENTE_PAGADO`, `VENCIDO`, `PAGADO`) y calificaciones, obtenidos con `calcularEstadoPago` y `hoyChile()`, sin recalcular reglas ni persistir estados. Los abonos SHALL contarse en su totalidad para el pago, sin importar su `fecha_recepcion`.
+
+#### Scenario: Estados distintos en el mes
+- **WHEN** el mes tiene pagos pendiente, parcial, vencido y pagado
+- **THEN** cada uno se presenta con su estado y su saldo pendiente
+
+#### Scenario: Abono posterior al mes
+- **WHEN** el pago de marzo se completa con abonos recibidos en abril
+- **THEN** en marzo figura como pagado, mientras sus ingresos de caja pertenecen a abril
+
+#### Scenario: Mes sin pagos esperados
+- **WHEN** no existen pagos esperados para el mes
+- **THEN** la lista de pagos está vacía y no hay error
+
+### Requirement: Saldo de créditos en UF por período
+El sistema SHALL presentar, por propiedad con crédito, el saldo en UF del registro con `saldo_pendiente_uf` no nulo y mayor `periodo` menor o igual al mes consultado, indicando el período de ese registro. SHALL NOT usar registros posteriores al mes consultado. Sin registro aplicable o sin crédito, SHALL indicarse "sin saldo registrado" en lugar de 0. El saldo SHALL expresarse en UF con hasta 4 decimales y SHALL NOT convertirse a CLP.
+
+#### Scenario: Último registro aplicable
+- **WHEN** hay saldos en enero y marzo y se consulta febrero
+- **THEN** se usa el de enero
+
+#### Scenario: Mes futuro
+- **WHEN** se consulta un mes posterior al último registro
+- **THEN** se usa el último registro existente y se indica su período
+
+#### Scenario: Mes anterior a todo registro
+- **WHEN** el mes es anterior al primer registro con saldo
+- **THEN** se indica "sin saldo registrado"
+
+### Requirement: Resumen mensual por propiedad
+El sistema SHALL ofrecer `GET /api/propiedades/{id}/resumen-mensual?mes=YYYY-MM` con ingresos recibidos, dividendos pagados, otros egresos, flujo neto y actividad reciente de esa propiedad, producidos por el mismo `dashboard-service` que la cartera. Responde 404 si la propiedad no existe o el id no es UUID, 400 con mes inválido y 401 sin sesión.
+
+#### Scenario: Resumen de una propiedad
+- **WHEN** se consulta una propiedad con operaciones en el mes
+- **THEN** los totales coinciden con su fila en el dashboard de cartera
+
+#### Scenario: Propiedad inexistente
+- **WHEN** el id no existe o no es UUID
+- **THEN** responde 404
+
+### Requirement: Actividad reciente del mes
+El sistema SHALL combinar abonos (por `fecha_recepcion`), dividendos pagados (por `fecha_pago_dividendo`) y movimientos T07 (por `fecha`) del mes y la propiedad en una lista con fecha, concepto, importe en CLP y origen, ordenada de más reciente a más antigua, con desempate determinista. Cada elemento SHALL enlazar al módulo correspondiente cuando exista una ruta.
+
+#### Scenario: Orden descendente
+- **WHEN** el mes tiene un abono el día 5, un dividendo el día 10 y un movimiento el día 20
+- **THEN** la lista es movimiento, dividendo, abono
+
+#### Scenario: Cada hecho una sola vez
+- **WHEN** el mes tiene un abono, un dividendo y un movimiento
+- **THEN** la lista contiene exactamente tres elementos, cada uno con su origen
+
+#### Scenario: Mes sin actividad
+- **WHEN** no hay hechos en el mes
+- **THEN** la lista está vacía
+
+### Requirement: Formato de importes y vigencia de los datos
+La interfaz SHALL mostrar CLP con separador de miles y sin decimales, y UF con hasta 4 decimales, formateando desde texto o Decimal sin pasar por `Number`; los cálculos financieros SHALL residir en servicios y funciones de dominio, no en componentes React. Las vistas SHALL reflejar los cambios hechos tras registrar, editar o eliminar abonos, dividendos o movimientos, incluso al volver a ellas, sin recarga manual.
+
+#### Scenario: Formato
+- **WHEN** se muestra 1234567 CLP y 1234.5 UF
+- **THEN** se ven como `1.234.567` y `1.234,5`
+
+#### Scenario: Vuelta a la vista
+- **WHEN** se registra un movimiento y se vuelve al detalle o al dashboard
+- **THEN** los totales y la actividad ya lo incluyen

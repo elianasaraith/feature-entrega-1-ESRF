@@ -32,8 +32,9 @@ model Propiedad {
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  credito   CreditoHipotecario?
-  contratos ContratoArriendo[]
+  credito     CreditoHipotecario?
+  contratos   ContratoArriendo[]
+  movimientos MovimientoFinanciero[]
 
   @@map("propiedad")
 }
@@ -58,7 +59,7 @@ model CreditoHipotecario {
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  propiedad Propiedad                  @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
+  propiedad Propiedad                @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
   registros CreditoRegistroMensual[]
 
   @@map("credito_hipotecario")
@@ -195,4 +196,37 @@ model AbonoArriendo {
   @@index([pagoEsperadoId])
   @@index([fechaRecepcion])
   @@map("abono_arriendo")
+}
+
+// Categorías de egreso manual (T07). Sin DIVIDENDO: el dividendo vive en
+// credito_registro_mensual (docs/data-model.md §4.10, D1).
+enum CategoriaMovimiento {
+  REPARACION
+  EQUIPAMIENTO
+  SEGURO
+  CONTRIBUCIONES
+  GASTO_COMUN
+  GASTO_EXTRAORDINARIO
+  OTRO
+
+  @@map("categoria_movimiento")
+}
+
+// Egreso manual de una propiedad (T07). docs/data-model.md §4.10. `fecha` es la
+// fecha de caja. Sin columna `tipo`. El CHECK (monto_clp > 0) vive en la
+// migración SQL.
+model MovimientoFinanciero {
+  id          String              @id @default(uuid()) @db.Uuid
+  propiedadId String              @map("propiedad_id") @db.Uuid
+  fecha       DateTime            @db.Date
+  categoria   CategoriaMovimiento
+  montoClp    Decimal             @map("monto_clp") @db.Decimal(14, 0)
+  descripcion String?
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  propiedad Propiedad @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
+
+  @@index([propiedadId, fecha])
+  @@map("movimiento_financiero")
 }

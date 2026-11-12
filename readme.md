@@ -14,11 +14,13 @@
 > **Nota sobre el estado del proyecto.** RealtyTrack ya tiene funcionalidades
 > implementadas: autenticación de usuario único (T12), propiedades (T01), créditos
 > hipotecarios y su registro mensual (T02, T03), contratos de arriendo (T04) y montos,
-> reajustes y pagos esperados (T05) y abonos con estado de pago derivado (T06), con pruebas
-> automatizadas y una interfaz para esas capacidades (el estado de verificación de T06 está
-> en `docs/work-tickets.md` §4.6). **El MVP no está terminado**: siguen pendientes, entre
-> otros, movimientos financieros (T07), aportes de capital
-> (T08), dashboard (T09), integración con la API de UF (T10) y documentos (T11), además del
+> reajustes y pagos esperados (T05), abonos con estado de pago derivado (T06) y movimientos
+> financieros (T07; implementado y verificado: suite completa con 199 pruebas, 0 fallidas y 0 omitidas,
+> build correcto, migración aplicada y revisión manual de la interfaz) y el dashboard financiero
+> (T09; implementado y verificado: suite completa con 218 pruebas, 0 fallidas y 0 omitidas,
+> build correcto y revisión manual; sin pruebas HTTP automatizadas de 200 y 404), con pruebas automatizadas y una interfaz para esas capacidades (el estado de
+> verificación está en `docs/work-tickets.md` §4.6 y §4.7). **El MVP no está terminado**:
+> siguen pendientes, entre otros, aportes de capital (T08), integración con la API de UF (T10) y documentos (T11), además del
 > despliegue. Lo que describen las secciones para esas capacidades es diseño propuesto; cada
 > sección distingue lo implementado de lo propuesto. El detalle técnico completo vive en
 > `docs/`; este documento lo resume e integra, sin duplicarlo.
@@ -222,9 +224,15 @@ aplícale las migraciones con `DATABASE_URL` y `DIRECT_URL` apuntando a ella y d
 
 **Estado funcional.** Implementado: acceso de usuario único (T12), propiedades (T01),
 crédito hipotecario (T02) y su registro mensual (T03), arrendatarios y contratos (T04),
-montos, reajustes y pagos esperados (T05), y abonos con estado de pago derivado (T06).
-**Pendiente del MVP:** movimientos financieros (T07), aportes de capital (T08), dashboard mensual
-(T09), valor de la UF (T10), documentos (T11) y despliegue.
+montos, reajustes y pagos esperados (T05), abonos con estado de pago derivado (T06) y
+movimientos financieros como egresos manuales (T07: migración
+`20261109120000_add_movimiento_financiero` aplicada, suite completa con 199 pruebas sin
+fallos ni omisiones, build correcto y revisión manual de la interfaz) y dashboard
+financiero (T09: `/dashboard` y resumen mensual en el detalle de la propiedad; implementado,
+suite completa de 218 pruebas sin fallos ni omisiones, build y revisión manual correctos; sin aportes ni
+equivalente en CLP de la UF, que dependen de T08 y T10).
+**Pendiente del MVP:** aportes de capital (T08), valor de la UF (T10), documentos (T11) y
+despliegue.
 
 ---
 

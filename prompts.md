@@ -453,6 +453,14 @@ los mensajes de apply de T01 a T05 con las restricciones que se dieron a la IA.*
 
 > Implementa completamente el cambio OpenSpec implement-rent-payments: CRUD de abonos con endpoints anidados bajo propiedad, contrato y pago esperado; monto <= 0 y fecha futura responden 422; el estado, el saldo, la fecha de completitud y las calificaciones se recalculan siempre desde los abonos y nunca se persisten; borrado físico con confirmación en la UI; los abonos se conservan ante reajustes de T05. Aplica y verifica las migraciones primero en la base de pruebas aislada y después en la de desarrollo, comprobando el destino antes de cada operación. No hagas commit ni push ni operaciones destructivas; si aparece una decisión bloqueante, detente y consúltame.
 
+**T07 — movimientos financieros (apply de `t07-movimientos-financieros`):**
+
+> Implementa completamente el cambio OpenSpec `t07-movimientos-financieros`: CRUD de egresos con las 7 categorías del ENUM, sin DIVIDENDO ni campo tipo; montos enteros positivos en CLP y fechas YYYY-MM-DD con validación de fechas futuras mediante hoyChile(); agregación mensual pura reutilizable por T09, donde el resumen sin mes cubre el historial completo y con mes solo ese período; interfaz con filtro mensual, total, desglose y eliminación con confirmación; pertenencia a la propiedad y autenticación en todas las operaciones; verificar que no se duplican los dividendos de T03. Antes de aplicar migraciones verifica los destinos de DATABASE_URL, DIRECT_URL y TEST_DATABASE_URL sin exponer credenciales; aplica primero en realtytrack_test y después en realtytrack. Si el sandbox impide acceder a .env o PostgreSQL, detente solo en las tareas dependientes de la base. Sin migrate reset ni operaciones destructivas, sin commit ni push.
+
+**T09 — dashboard financiero (apply de `t09-dashboard-financiero`):**
+
+> Implementa completamente el change OpenSpec `t09-dashboard-financiero`: dashboard de cartera en `/dashboard` y resumen mensual en `/propiedades/[id]` (datos, resumen del mes, actividad reciente con abonos, dividendos y movimientos en orden descendente, accesos), con un único `dashboard-service`, `GET /api/dashboard` y `GET /api/propiedades/[id]/resumen-mensual`. Totales por fecha de caja, estados de pago con `calcularEstadoPago`, saldo UF hasta el mes consultado, BigInt/Decimal sin `Number`, sin aportes (T08) ni conversión UF→CLP (T10), sin tablas, migraciones ni cachés. Aplica `router.refresh()` o `revalidatePath` solo si se demuestra necesario. Ejecuta TypeScript, lint, pruebas y build si el entorno lo permite; si PostgreSQL no es accesible identifica las pruebas pendientes sin marcarlas como aprobadas. Sin commit ni push, sin operaciones destructivas, y no declares T09 verificado si faltan pruebas o revisión manual.
+
 ---
 
 ### 7. Pull Requests

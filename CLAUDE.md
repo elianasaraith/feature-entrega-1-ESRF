@@ -73,8 +73,10 @@ Reglas confirmadas:
   garantía, día esperado de pago, estado y documentos asociados.
 - Un pago de arriendo distingue siempre **esperado** vs **recibido**.
   Estados: pendiente · pagado · parcialmente pagado · vencido.
-- Movimientos financieros por propiedad: dividendos, reparaciones, equipamiento, seguros,
-  contribuciones, gastos extraordinarios, otros.
+- Movimientos financieros por propiedad (egresos manuales): reparaciones, equipamiento,
+  seguros, contribuciones, gastos comunes en vacancia, gastos extraordinarios, otros. El
+  **dividendo no es un movimiento**: se registra solo en el registro mensual del crédito
+  (`docs/data-model.md` §4.10, D1).
 - Los gastos comunes ordinarios los paga el arrendatario: fuera del control recurrente
   del propietario.
 - El histórico financiero se consulta **por mes**.

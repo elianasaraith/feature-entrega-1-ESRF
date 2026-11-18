@@ -15,7 +15,7 @@ import { arrendatarioInputSchema } from "../../server/schemas/arrendatario";
 import { contratoCrearSchema } from "../../server/schemas/contrato";
 import { creditoInputSchema } from "../../server/schemas/credito";
 import { registroMensualCrearSchema } from "../../server/schemas/credito-registro";
-import { movimientoInputSchema } from "../../server/schemas/movimiento";
+import { movimientoEdicionSchema, movimientoInputSchema } from "../../server/schemas/movimiento";
 import { propiedadInputSchema } from "../../server/schemas/propiedad";
 import { resolveTestDatabase } from "../setup/test-db";
 
@@ -322,4 +322,179 @@ test("propiedad inexistente o id no UUID → 404", { skip }, async () => {
     () => service.resumenPropiedad("00000000-0000-4000-8000-000000000000", MES, HOY),
     NotFoundError
   );
+});
+
+// --- Gastos desglosados en conceptos (ampliación de T07) ---------------------
+// T09 no cambia: solo lee `movimiento_financiero.monto_clp`, que en un desglosado
+// es la suma de sus conceptos. Estas pruebas demuestran que se cuenta una sola
+// vez. Datos y limpieza: los de este archivo (los conceptos caen en cascada).
+const DESGLOSE = [
+  { nombre: "Materiales", montoClp: "60000" },
+  { nombre: "Mano de obra", montoClp: "70000" },
+  { nombre: "Transporte", montoClp: "20000" },
+];
+const gastoDesglosado = (propiedadId: string, extra: Record<string, unknown> = {}) =>
+  movimientos.crear(propiedadId, gasto({ montoClp: undefined, conceptos: DESGLOSE, ...extra }), HOY);
+const edicionGasto = (extra: Record<string, unknown> = {}) =>
+  movimientoEdicionSchema.parse({ fecha: "2026-03-10", categoria: "REPARACION", ...extra });
+const resumen = (propiedadId: string) => service.resumenPropiedad(propiedadId, MES, HOY);
+const conceptosDe = (movimientoId: string) =>
+  prisma.movimientoConcepto.count({ where: { movimientoFinancieroId: movimientoId } });
+
+test("un gasto desglosado de 150.000 se cuenta una sola vez y sus conceptos no son movimientos", { skip }, async () => {
+  const id = await nuevaPropiedad();
+  const m = await gastoDesglosado(id);
+  assert.equal(m.montoClp, "150000");
+
+  const r = await resumen(id);
+  assert.equal(r.otrosEgresosClp, "150000"); // no 300000
+  assert.equal(r.egresosTotalesClp, "150000");
+  assert.equal(r.flujoNetoClp, "-150000");
+  assert.equal(r.actividad.length, 1); // un elemento, no cuatro
+  assert.deepEqual(r.actividad.map((a) => [a.origen, a.montoClp]), [["MOVIMIENTO", "150000"]]);
+
+  // T07: el listado y el resumen mensual cuentan el movimiento padre una sola vez.
+  const lista = await movimientos.listar(id, { mes: MES });
+  assert.equal(lista.movimientos.length, 1);
+  assert.equal(lista.totalClp, "150000");
+  assert.equal((await movimientos.resumenMensual(id, MES)).totalClp, "150000");
+  assert.equal(await prisma.movimientoFinanciero.count({ where: { propiedadId: id } }), 1);
+  assert.equal(await conceptosDe(m.id), 3);
+});
+
+test("flujo neto = arriendos − dividendos − otros egresos, con gastos simples y desglosados juntos", { skip }, async () => {
+  const id = await nuevaPropiedad();
+  const cid = await conContrato(id);
+  await conCredito(id);
+  await abonar(id, cid, "2026-03-01", "500000", "2026-03-04");
+  await registros.crear(id, registro({ periodo: MES, dividendoPagadoClp: "300000", fechaPagoDividendo: "2026-03-05" }));
+  await movimientos.crear(id, gasto({ montoClp: "100000" }), HOY); // simple, como siempre
+  await gastoDesglosado(id); // 150.000
+
+  const r = await resumen(id);
+  assert.equal(r.ingresosClp, "500000");
+  assert.equal(r.dividendosClp, "300000");
+  assert.equal(r.otrosEgresosClp, "250000"); // 100.000 + 150.000
+  assert.equal(r.egresosTotalesClp, "550000");
+  assert.equal(r.flujoNetoClp, "-50000");
+  assert.equal(
+    r.flujoNetoClp,
+    (BigInt(r.ingresosClp) - BigInt(r.dividendosClp) - BigInt(r.otrosEgresosClp)).toString()
+  );
+  assert.equal(r.actividad.filter((a) => a.origen === "MOVIMIENTO").length, 2);
+});
+
+test("editar un concepto y llevar el total a 160.000 actualiza el dashboard", { skip }, async () => {
+  const id = await nuevaPropiedad();
+  const m = await gastoDesglosado(id);
+  assert.equal((await resumen(id)).otrosEgresosClp, "150000");
+
+  const editado = await movimientos.editar(
+    id,
+    m.id,
+    edicionGasto({
+      conceptos: [
+        { nombre: "Materiales", montoClp: "70000" }, // +10.000
+        { nombre: "Mano de obra", montoClp: "70000" },
+        { nombre: "Transporte", montoClp: "20000" },
+      ],
+    }),
+    HOY
+  );
+  assert.equal(editado.montoClp, "160000");
+
+  const r = await resumen(id);
+  assert.equal(r.otrosEgresosClp, "160000"); // ni 150.000 ni 310.000
+  assert.equal(r.flujoNetoClp, "-160000");
+  assert.deepEqual(r.actividad.map((a) => a.montoClp), ["160000"]);
+  assert.equal((await movimientos.resumenMensual(id, MES)).totalClp, "160000");
+  assert.equal(await conceptosDe(m.id), 3);
+});
+
+test("convertir entre simple y desglosado no duplica ni pierde el importe; eliminar lo retira por completo", { skip }, async () => {
+  const id = await nuevaPropiedad();
+  const m = await gastoDesglosado(id);
+  assert.equal((await resumen(id)).otrosEgresosClp, "150000");
+
+  // Desglosado → simple con el mismo importe: ni se duplica ni se pierde.
+  await movimientos.editar(id, m.id, edicionGasto({ conceptos: [], montoClp: "150000" }), HOY);
+  assert.equal((await resumen(id)).otrosEgresosClp, "150000");
+  assert.equal(await conceptosDe(m.id), 0);
+
+  // Simple con otro importe.
+  await movimientos.editar(id, m.id, edicionGasto({ montoClp: "90000" }), HOY);
+  assert.equal((await resumen(id)).otrosEgresosClp, "90000");
+
+  // Simple → desglosado: el total pasa a ser la suma, no 90.000 + 150.000.
+  await movimientos.editar(id, m.id, edicionGasto({ conceptos: DESGLOSE }), HOY);
+  assert.equal((await resumen(id)).otrosEgresosClp, "150000");
+
+  // Editar solo la descripción (sin `conceptos`) no altera el importe ni el desglose.
+  await movimientos.editar(id, m.id, edicionGasto({ descripcion: "Solo la descripción" }), HOY);
+  assert.equal((await resumen(id)).otrosEgresosClp, "150000");
+  assert.equal(await conceptosDe(m.id), 3);
+
+  // Eliminar retira el total y, en cascada, los conceptos.
+  await movimientos.eliminar(id, m.id);
+  const r = await resumen(id);
+  assert.equal(r.otrosEgresosClp, "0");
+  assert.equal(r.flujoNetoClp, "0");
+  assert.equal(r.actividad.length, 0);
+  assert.equal(await conceptosDe(m.id), 0);
+});
+
+test("cartera = suma de propiedades con gastos desglosados, sin mezclar propiedades", { skip }, async () => {
+  const a = await nuevaPropiedad();
+  const b = await nuevaPropiedad();
+  await gastoDesglosado(a); // 150.000
+  await movimientos.crear(b, gasto({ montoClp: "1000" }), HOY);
+  await movimientos.crear(
+    b,
+    gasto({ montoClp: undefined, conceptos: [{ nombre: "Único", montoClp: "40000" }] }),
+    HOY
+  ); // desglosado de un concepto
+
+  const cartera = await service.resumenMensual(MES, HOY);
+  const fa = cartera.propiedades.find((f) => f.propiedadId === a);
+  const fb = cartera.propiedades.find((f) => f.propiedadId === b);
+  assert.equal(fa?.otrosEgresosClp, "150000");
+  assert.equal(fb?.otrosEgresosClp, "41000"); // 1.000 simple + 40.000 desglosado
+  const suma = (k: "otrosEgresosClp" | "egresosTotalesClp" | "flujoNetoClp") =>
+    cartera.propiedades.reduce((acc, f) => acc + BigInt(f[k]), BigInt(0)).toString();
+  assert.equal(cartera.totales.otrosEgresosClp, suma("otrosEgresosClp"));
+  assert.equal(cartera.totales.egresosTotalesClp, suma("egresosTotalesClp"));
+  assert.equal(cartera.totales.flujoNetoClp, suma("flujoNetoClp"));
+});
+
+test("T09 no necesita los conceptos: ignora filas hijas inconsistentes y su SQL no toca movimiento_concepto", { skip }, async () => {
+  const id = await nuevaPropiedad();
+  const m = await gastoDesglosado(id);
+  // Fila hija que NO suma con el padre, insertada eludiendo el servicio: si T09
+  // sumara o uniera conceptos, el resultado cambiaría.
+  await prisma.movimientoConcepto.create({
+    data: { movimientoFinancieroId: m.id, nombre: "Fila de prueba", montoClp: "999999", orden: 9 },
+  });
+
+  const consultas: string[] = [];
+  const cliente = new PrismaClient({ datasourceUrl: testUrl as string, log: [{ emit: "event", level: "query" }] });
+  cliente.$on("query", (e) => {
+    consultas.push(e.query);
+  });
+  try {
+    const dashboard = createDashboardService(cliente);
+    const propiedad = await dashboard.resumenPropiedad(id, MES, HOY);
+    const cartera = await dashboard.resumenMensual(MES, HOY);
+    assert.equal(propiedad.otrosEgresosClp, "150000"); // solo monto_clp del padre
+    assert.equal(cartera.propiedades.find((f) => f.propiedadId === id)?.otrosEgresosClp, "150000");
+    assert.equal(propiedad.actividad.length, 1);
+    await new Promise((resolver) => setTimeout(resolver, 100)); // deja llegar los eventos de log
+  } finally {
+    await cliente.$disconnect();
+  }
+  assert.ok(consultas.some((q) => q.includes('"movimiento_financiero"')), "T09 consulta movimiento_financiero");
+  assert.ok(consultas.every((q) => !q.includes("movimiento_concepto")), "ninguna consulta de T09 toca movimiento_concepto");
+
+  // T07 tampoco suma conceptos: el padre se cuenta una vez con su monto_clp.
+  assert.equal((await movimientos.resumenMensual(id, MES)).totalClp, "150000");
+  assert.equal((await movimientos.listar(id, { mes: MES })).movimientos.length, 1);
 });

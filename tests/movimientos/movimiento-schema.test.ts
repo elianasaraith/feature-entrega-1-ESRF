@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { movimientoInputSchema } from "../../server/schemas/movimiento";
+import { movimientoEdicionSchema, movimientoInputSchema } from "../../server/schemas/movimiento";
 
 // Validación de formato (→ 400). Las reglas de negocio (monto > 0, fecha no
 // futura) las aplica el servicio (→ 422) y se prueban en la integración.
@@ -53,4 +53,106 @@ test("fecha con formato o calendario inválido se rechaza", () => {
 test("un campo `tipo` se ignora: el resultado no lo contiene", () => {
   const r = movimientoInputSchema.parse({ ...valido, tipo: "INGRESO" });
   assert.equal("tipo" in r, false);
+});
+
+// --- Desglose en conceptos (ampliación de T07) -------------------------------
+const conceptos = [
+  { nombre: "Materiales", montoClp: "60000" },
+  { nombre: "Mano de obra", montoClp: "70000" },
+  { nombre: "Transporte", montoClp: "20000" },
+];
+const sinMonto = { fecha: "2026-03-04", categoria: "REPARACION" };
+
+// Mensajes agrupados por campo, como los entrega toHttpResponse.
+function campos(schema: typeof movimientoInputSchema, entrada: unknown): string[] {
+  const r = schema.safeParse(entrada);
+  assert.equal(r.success, false);
+  return r.success ? [] : r.error.issues.map((i) => i.path.join("."));
+}
+
+test("gasto simple sin `conceptos`: la salida es idéntica a la de antes (sin clave conceptos)", () => {
+  for (const schema of [movimientoInputSchema, movimientoEdicionSchema]) {
+    const r = schema.parse(valido);
+    assert.equal("conceptos" in r, false);
+    assert.deepEqual(r, { ...valido, descripcion: null });
+  }
+});
+
+test("desglosado válido: conceptos normalizados y montoClp opcional", () => {
+  const r = movimientoInputSchema.parse({ ...sinMonto, conceptos: [{ nombre: "  Materiales ", montoClp: 60000 }] });
+  assert.deepEqual(r.conceptos, [{ nombre: "Materiales", montoClp: "60000" }]);
+  assert.equal("montoClp" in r, false);
+  assert.equal(movimientoInputSchema.parse({ ...sinMonto, montoClp: "150000", conceptos }).montoClp, "150000");
+});
+
+test("nombres repetidos se permiten", () => {
+  const dos = [
+    { nombre: "Materiales", montoClp: "1" },
+    { nombre: "Materiales", montoClp: "2" },
+  ];
+  assert.equal(movimientoInputSchema.parse({ ...sinMonto, conceptos: dos }).conceptos?.length, 2);
+});
+
+test("nombre vacío, solo espacios, ausente o de más de 100 caracteres → 400 en conceptos.N.nombre", () => {
+  for (const nombre of ["", "   ", undefined, "x".repeat(101)]) {
+    const rutas = campos(movimientoInputSchema, { ...sinMonto, conceptos: [{ nombre, montoClp: "10" }] });
+    assert.ok(rutas.includes("conceptos.0.nombre"), `nombre ${JSON.stringify(nombre)?.slice(0, 12)}`);
+  }
+  assert.equal(
+    movimientoInputSchema.parse({ ...sinMonto, conceptos: [{ nombre: "x".repeat(100), montoClp: "10" }] }).conceptos?.length,
+    1
+  );
+});
+
+test("monto de concepto: formato inválido o fuera de rango → 400; 0 y negativos pasan el formato", () => {
+  for (const montoClp of ["abc", "1.5", "", "1e3", "123456789012345", undefined]) {
+    const rutas = campos(movimientoInputSchema, { ...sinMonto, conceptos: [{ nombre: "A", montoClp }] });
+    assert.ok(rutas.includes("conceptos.0.montoClp"), `monto ${String(montoClp)}`);
+  }
+  for (const montoClp of ["0", "-5"]) {
+    assert.equal(movimientoInputSchema.safeParse({ ...sinMonto, conceptos: [{ nombre: "A", montoClp }] }).success, true);
+  }
+});
+
+test("más de 50 conceptos → 400 en conceptos; 50 se aceptan", () => {
+  const n = (k: number) => Array.from({ length: k }, (_, i) => ({ nombre: `c${i}`, montoClp: "1" }));
+  assert.equal(movimientoInputSchema.parse({ ...sinMonto, conceptos: n(50) }).conceptos?.length, 50);
+  assert.ok(campos(movimientoInputSchema, { ...sinMonto, conceptos: n(51) }).includes("conceptos"));
+  assert.ok(campos(movimientoEdicionSchema, { ...sinMonto, conceptos: n(51) }).includes("conceptos"));
+});
+
+test("`conceptos: null` → 400 en conceptos, en el alta y en la edición", () => {
+  for (const schema of [movimientoInputSchema, movimientoEdicionSchema]) {
+    assert.ok(campos(schema, { ...valido, conceptos: null }).includes("conceptos"));
+    assert.ok(campos(schema, { ...sinMonto, montoClp: "10", conceptos: null }).includes("conceptos"));
+  }
+});
+
+test("`conceptos` que no es una lista → 400", () => {
+  assert.ok(campos(movimientoInputSchema, { ...valido, conceptos: "Materiales" }).includes("conceptos"));
+  assert.ok(campos(movimientoInputSchema, { ...valido, conceptos: {} }).includes("conceptos"));
+});
+
+test("alta: sin conceptos o con lista vacía exige montoClp → 400 en montoClp", () => {
+  assert.deepEqual(campos(movimientoInputSchema, sinMonto), ["montoClp"]);
+  assert.deepEqual(campos(movimientoInputSchema, { ...sinMonto, conceptos: [] }), ["montoClp"]);
+  assert.equal(movimientoInputSchema.parse({ ...valido, conceptos: [] }).montoClp, "150000");
+});
+
+test("edición: montoClp puede omitirse con `conceptos` ausente; con [] es obligatorio", () => {
+  const r = movimientoEdicionSchema.parse(sinMonto);
+  assert.equal("montoClp" in r, false);
+  assert.equal("conceptos" in r, false);
+  assert.deepEqual(campos(movimientoEdicionSchema, { ...sinMonto, conceptos: [] }), ["montoClp"]);
+  assert.equal(movimientoEdicionSchema.parse({ ...valido, conceptos: [] }).montoClp, "150000");
+});
+
+test("la ausencia de `conceptos` se distingue de la lista vacía en la salida", () => {
+  assert.equal("conceptos" in movimientoEdicionSchema.parse(valido), false);
+  assert.deepEqual(movimientoEdicionSchema.parse({ ...valido, conceptos: [] }).conceptos, []);
+});
+
+test("los demás campos se validan igual con conceptos (categoría, fecha, DIVIDENDO)", () => {
+  assert.ok(campos(movimientoInputSchema, { ...sinMonto, conceptos, categoria: "DIVIDENDO" }).includes("categoria"));
+  assert.ok(campos(movimientoInputSchema, { ...sinMonto, conceptos, fecha: "2026-02-30" }).includes("fecha"));
 });

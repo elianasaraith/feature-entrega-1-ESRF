@@ -17,8 +17,8 @@ verificables, y aquí se resuelve cómo representarlas en PostgreSQL.
 | Cómo se representan los abonos frente al pago esperado | `abono_arriendo` N : 1 `pago_esperado`; el total recibido se deriva | §4.9 · §6 |
 | Cómo se conserva la serie mensual de dividendo y saldo | Entidad `credito_registro_mensual`, una fila por crédito y mensualidad | §4.4 |
 | Cómo se asocia el valor de UF a cada período mensual | Entidad `valor_uf_periodo`, un valor por período que no se sobrescribe | §4.12 · §8 |
-| Cómo se vinculan un egreso y el aporte que lo financia | FK nulable `aporte_capital.movimiento_financiero_id` | §4.11 |
 | Qué categorías de movimiento se fijan | ENUM cerrado con valor `OTRO` | §4.10 |
+| Cómo se desglosa un gasto en conceptos | Entidad hija `movimiento_concepto`; el total vive en el movimiento | §4.14 |
 
 **Alcance.** Modelo lógico: entidades, atributos, tipos, restricciones y reglas de
 derivación. No incluye migraciones, DDL definitivo, índices de rendimiento ajustados a
@@ -199,14 +199,12 @@ erDiagram
         timestamptz updated_at "NOT NULL"
     }
 
-    APORTE_CAPITAL {
+    MOVIMIENTO_CONCEPTO {
         uuid id PK
-        uuid propiedad_id FK "NOT NULL"
-        uuid movimiento_financiero_id FK "NULL"
-        date fecha "NOT NULL - fecha de caja"
-        numeric monto_clp "NOT NULL - 14,0"
-        motivo_aporte motivo "NOT NULL"
-        text descripcion "NULL"
+        uuid movimiento_financiero_id FK "NOT NULL - ON DELETE CASCADE"
+        text nombre "NOT NULL"
+        numeric monto_clp "NOT NULL - 14,0 - CHECK > 0"
+        int orden "NOT NULL"
         timestamptz created_at "NOT NULL"
         timestamptz updated_at "NOT NULL"
     }
@@ -242,8 +240,7 @@ erDiagram
     CONTRATO_ARRIENDO ||--o{ PAGO_ESPERADO : "genera"
     PAGO_ESPERADO ||--o{ ABONO_ARRIENDO : "se cubre con"
     PROPIEDAD ||--o{ MOVIMIENTO_FINANCIERO : "incurre en"
-    PROPIEDAD ||--o{ APORTE_CAPITAL : "recibe"
-    MOVIMIENTO_FINANCIERO ||--o{ APORTE_CAPITAL : "es financiado por"
+    MOVIMIENTO_FINANCIERO ||--o{ MOVIMIENTO_CONCEPTO : "se desglosa en"
     PROPIEDAD ||--o{ DOCUMENTO : "agrupa"
     CREDITO_HIPOTECARIO ||--o{ DOCUMENTO : "respaldado por"
     CONTRATO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
@@ -548,33 +545,20 @@ permitiría contabilizar el mismo dinero dos veces.
 Una etiqueta de enumeración no convierte los gastos comunes en un módulo administrado por el
 producto: su administración ordinaria sigue fuera de alcance.
 
-### 4.11 `aporte_capital`
+**`monto_clp` es siempre el total del gasto.** Un movimiento puede estar desglosado en
+conceptos (§4.14); en ese caso `monto_clp` es la suma de sus conceptos y lo calcula el
+servidor al escribir. Por eso T09 y todas las agregaciones leen solo `monto_clp` del
+movimiento y **nunca suman los conceptos**: sumarlos de nuevo contaría el gasto dos veces.
+No hay columna que distinga un gasto simple de uno desglosado: un movimiento sin conceptos es
+simple.
 
-Capital propio que el propietario incorpora a una propiedad.
+### 4.11 (retirada) `aporte_capital`
 
-| Atributo | Tipo | Nulo | Restricción | Descripción |
-|---|---|---|---|---|
-| `id` | `UUID` | No | PK | |
-| `propiedad_id` | `UUID` | No | FK → `propiedad` | |
-| `movimiento_financiero_id` | `UUID` | Sí | FK → `movimiento_financiero` | Egreso o inversión que este aporte financia |
-| `fecha` | `DATE` | No | | **Fecha de caja** del aporte |
-| `monto_clp` | `NUMERIC(14,0)` | No | `> 0` | |
-| `motivo` | `ENUM motivo_aporte` | No | `PIE_INICIAL` \| `CAPITAL_ADICIONAL` \| `COBERTURA_DEFICIT` \| `OTRO` | |
-| `descripcion` | `TEXT` | Sí | | |
-| `created_at`, `updated_at` | `TIMESTAMPTZ` | No | | |
-
-**Entidad separada del egreso, y no una categoría de movimiento.** Un egreso es uso de
-recursos de la propiedad; un aporte es dinero propio que entra. Financiar una remodelación
-con capital propio genera **dos registros**: el egreso por la remodelación y el aporte que
-lo financia (HU03 E5). Tratar el aporte como egreso duplicaría la salida de dinero y
-borraría el resultado del período.
-
-**El vínculo `movimiento_financiero_id` es opcional y nunca afecta al cálculo.** Da
-trazabilidad —qué inversión financió este aporte— sin entrar en el flujo neto antes de
-aportes, que se calcula solo con ingresos y egresos (§6). Un movimiento puede estar
-financiado por varios aportes; un aporte financia como máximo uno. Se descarta una relación
-N:M con montos parciales por sobreingeniería: el producto no pide repartir un aporte entre
-varios egresos.
+Esta entidad se diseñó para registrar el capital propio incorporado a una propiedad (ticket
+T08) y **se canceló por decisión de producto**: el MVP no registra aportes de capital. No
+existe tabla ni enumeración de aportes: las migraciones `20261114120000_add_aporte_capital` y
+`20261115120000_drop_aporte_capital` son un par de alta y retiro sin efecto neto. Se conserva el número de sección
+para no alterar las referencias a §4.12 y §4.13.
 
 ### 4.12 `valor_uf_periodo`
 
@@ -652,6 +636,51 @@ Se descarta la asociación polimórfica `(entidad_tipo, entidad_id)`, que sacrif
 integridad referencial para ahorrar cuatro columnas nulables, y también cuatro tablas de
 unión, que no aportarían nada sobre las FK directas.
 
+### 4.14 `movimiento_concepto`
+
+Concepto de un gasto desglosado: una línea con nombre y monto dentro de un movimiento.
+
+| Atributo | Tipo | Nulo | Restricción | Descripción |
+|---|---|---|---|---|
+| `id` | `UUID` | No | PK | |
+| `movimiento_financiero_id` | `UUID` | No | FK → `movimiento_financiero`, `ON DELETE CASCADE` | Movimiento al que pertenece |
+| `nombre` | `TEXT` | No | 1 a 100 caracteres (validado en la aplicación) | Ej. «Materiales» |
+| `monto_clp` | `NUMERIC(14,0)` | No | `> 0` | Monto del concepto, en CLP |
+| `orden` | `INTEGER` | No | | Posición en la lista enviada, desde 0; conserva el orden de ingreso |
+| `created_at`, `updated_at` | `TIMESTAMPTZ` | No | | |
+
+Índice por `movimiento_financiero_id`. Sin `UNIQUE` sobre `(movimiento, orden)`: un reemplazo
+borra y reinserta en la misma transacción y la unicidad no protegería nada que el servicio
+no controle.
+
+**Un concepto no es un movimiento.** No tiene fecha, categoría ni propiedad propias, y no
+existen rutas para tratarlo por separado: nace, cambia y desaparece con su movimiento
+(composición, `ON DELETE CASCADE`).
+
+**Simple o desglosado se deriva, no se almacena.** Un movimiento sin conceptos es un gasto
+simple; con uno o más, es desglosado (hasta 50). Los movimientos anteriores a esta entidad
+son gastos simples, sin migración de datos.
+
+**El total vive en el movimiento.** `movimiento_financiero.monto_clp` es la suma de los
+conceptos y se calcula en el servidor con aritmética entera exacta. Las agregaciones (T09) y
+el resumen mensual de T07 leen solo ese campo, nunca la suma de los conceptos, así que un
+gasto desglosado se cuenta una sola vez. Como la base no puede expresar «total = suma» entre
+dos tablas, se audita con:
+
+```sql
+SELECT m.id, m.monto_clp, SUM(c.monto_clp) AS suma_conceptos
+FROM movimiento_financiero m
+JOIN movimiento_concepto c ON c.movimiento_financiero_id = m.id
+GROUP BY m.id, m.monto_clp
+HAVING SUM(c.monto_clp) <> m.monto_clp;   -- esperado: 0 filas
+```
+
+**Reglas de edición.** El campo `conceptos` del `PUT` decide el desglose: **ausente** lo
+conserva (y solo acepta un `monto_clp` igual al total vigente); **`[]`** convierte el gasto en
+simple, exige un monto positivo y elimina los conceptos; **una lista** lo reemplaza por
+completo y el total se recalcula; **`null`** es un error de formato. Todo ocurre de forma
+atómica: o se aplica el movimiento con todos sus conceptos, o no cambia nada.
+
 ---
 
 ## 5. Relaciones y cardinalidades
@@ -666,13 +695,12 @@ unión, que no aportarían nada sobre las FK directas.
 | `contrato_arriendo` | 1 : 0..N | `pago_esperado` | Composición | Uno por período vigente |
 | `pago_esperado` | 1 : 0..N | `abono_arriendo` | Composición | |
 | `propiedad` | 1 : 0..N | `movimiento_financiero` | Composición | |
-| `propiedad` | 1 : 0..N | `aporte_capital` | Composición | |
-| `movimiento_financiero` | 1 : 0..N | `aporte_capital` | Asociación opcional | Trazabilidad del financiamiento |
 | `propiedad` | 1 : 0..N | `documento` | Composición | Obligatoria |
 | `credito_hipotecario` | 1 : 0..N | `documento` | Asociación opcional | Excluyente |
 | `contrato_arriendo` | 1 : 0..N | `documento` | Asociación opcional | Excluyente |
 | `abono_arriendo` | 1 : 0..N | `documento` | Asociación opcional | Excluyente |
 | `movimiento_financiero` | 1 : 0..N | `documento` | Asociación opcional | Excluyente |
+| `movimiento_financiero` | 1 : 0..N | `movimiento_concepto` | Composición | `ON DELETE CASCADE`; sin conceptos = gasto simple |
 
 ### 5.1 Restricciones que la base de datos no impone
 
@@ -687,12 +715,15 @@ Se validan en la capa de aplicación y se comprueban con tests:
    exista esa fila, T04 rechaza (409) editar el mes de `fecha_inicio`, para no desalinearla
    sin sobrescribir el monto.
 5. **`pago_esperado.periodo` cae dentro de la vigencia de su contrato.**
+6. **En un gasto desglosado, `movimiento_financiero.monto_clp` es igual a la suma de los
+   `monto_clp` de sus conceptos.** Lo garantiza el servicio al escribir, dentro de una
+   transacción; no hay trigger. Se audita con una consulta (§4.14).
 
 ### 5.2 Índices previstos
 
 Además de los que crean PK y `UNIQUE`: FK de cada tabla, y los que sirven la consulta por
 mes, que es el patrón dominante — `abono_arriendo(fecha_recepcion)`,
-`movimiento_financiero(propiedad_id, fecha)`, `aporte_capital(propiedad_id, fecha)`,
+`movimiento_financiero(propiedad_id, fecha)`, `movimiento_concepto(movimiento_financiero_id)`,
 `credito_registro_mensual(fecha_pago_dividendo)`, `contrato_arriendo(propiedad_id,
 fecha_inicio)`.
 
@@ -720,9 +751,8 @@ deriva en el momento de la consulta y **no se almacena**.
 | Saldo actual del crédito | `saldo_pendiente_uf` del `periodo` máximo registrado |
 | Equivalente en CLP de un importe en UF | `monto_uf × valor_uf_periodo.valor_clp` del período |
 | Ingresos recibidos del mes | `SUM(abono_arriendo.monto_clp)` con `fecha_recepcion` en el mes |
-| Egresos del mes | `SUM(movimiento_financiero.monto_clp)` por `fecha` **+** `SUM(dividendo_pagado_clp)` por `fecha_pago_dividendo` |
-| Flujo neto antes de aportes | Ingresos − egresos |
-| Aportes del mes y acumulado | `SUM(aporte_capital.monto_clp)`, **excluidos** del flujo neto |
+| Egresos del mes | `SUM(movimiento_financiero.monto_clp)` por `fecha` **+** `SUM(dividendo_pagado_clp)` por `fecha_pago_dividendo`. El `monto_clp` de un gasto desglosado ya incluye sus conceptos: **no se suman de nuevo** |
+| Flujo neto | Ingresos − egresos |
 | Agregados del dashboard | Consulta sobre lo anterior |
 
 ### 6.1 Estado del pago de arriendo
@@ -813,7 +843,6 @@ Todo hecho financiero se imputa al flujo del mes de su **fecha real**:
 | Abono de arriendo | `abono_arriendo.fecha_recepcion` |
 | Egreso o inversión | `movimiento_financiero.fecha` |
 | Dividendo hipotecario | `credito_registro_mensual.fecha_pago_dividendo` |
-| Aporte de capital | `aporte_capital.fecha` |
 
 `credito_registro_mensual.periodo` **no interviene en el flujo de caja**: identifica la
 mensualidad hipotecaria a la que corresponde el registro, y es la clave por la que se
@@ -863,7 +892,7 @@ el rótulo dependería de que alguien se acordara de escribirlo.
 | Saldo pendiente del crédito | **UF** | Es lo que el banco informa |
 | Monto original y seguros del crédito | **UF** | Datos contractuales |
 | Dividendo efectivamente pagado | **CLP** | Es el desembolso real de la cartola, no una conversión |
-| Monto de arriendo, abonos, egresos, aportes | **CLP** | Los arriendos y el flujo se manejan en pesos |
+| Monto de arriendo, abonos y egresos | **CLP** | Los arriendos y el flujo se manejan en pesos |
 | Valor de compra de la propiedad | **UF o CLP** | Según lo pactado; la moneda es parte del dato |
 
 Las métricas consolidadas del dashboard se expresan en CLP. Los datos contractuales del
@@ -934,7 +963,7 @@ la serie diaria, y §6, donde la conversión UF → CLP se define por período y
 | `pago_esperado` | | ● | ○ |
 | `abono_arriendo` | | ● | ● |
 | `movimiento_financiero` | | | ● |
-| `aporte_capital` | | | ● |
+| `movimiento_concepto` | | | ● |
 | `valor_uf_periodo` | ○ | | ● |
 | `documento` | ● | ● | |
 
@@ -949,8 +978,8 @@ la serie diaria, y §6, donde la conversión UF → CLP se define por período y
 | 3 | Determinar el estado de un pago | Precedencia de §6.1 sobre datos ya registrados |
 | 4 | Mismas cifras al reconsultar un mes | `valor_uf_periodo` no se sobrescribe (§8.3) |
 | 5 | Flujo neto sin sumar a mano | Derivación de ingresos y egresos (§6) |
-| 6 | Distinguir resultado de capital aportado | `aporte_capital` separado y excluido del flujo neto |
-| 7 | Inversión y aporte por separado | Dos registros, vinculados por FK opcional (§4.11) |
+| 6 | Registrar un gasto simple o desglosado en conceptos | Entidad hija `movimiento_concepto` (§4.14); el total vive en `movimiento_financiero.monto_clp` |
+| 7 | Un gasto desglosado se cuenta una sola vez en los egresos | Las agregaciones leen solo `monto_clp` del movimiento, que ya es la suma de sus conceptos (§4.10, §6) |
 | 8 | Saldo de un crédito en un mes anterior | `credito_registro_mensual` por `periodo` |
 | 9 | Localizar un documento desde su propiedad | `documento.propiedad_id` obligatorio |
 | 10 | Inicializar con datos históricos anonimizados | Todas las entidades admiten carga por seeds; sin importador |
@@ -964,7 +993,7 @@ la serie diaria, y §6, donde la conversión UF → CLP se define por período y
 | # | Decisión | Justificación |
 |---|---|---|
 | D1 | El dividendo se registra solo en `credito_registro_mensual`, sin categoría `DIVIDENDO` en `movimiento_financiero` | Un único punto de registro; una categoría homónima duplicaría la misma salida de dinero |
-| D2 | `periodo` (mensualidad hipotecaria) y `fecha_pago_dividendo` (caja) son datos distintos, y el flujo imputa por la fecha de pago | Mantiene la regla de caja uniforme para los cuatro tipos de hecho |
+| D2 | `periodo` (mensualidad hipotecaria) y `fecha_pago_dividendo` (caja) son datos distintos, y el flujo imputa por la fecha de pago | Mantiene la regla de caja uniforme para los tres tipos de hecho |
 | D3 | `arrendatario` es entidad propia | Reutilizable entre contratos sucesivos; RUT único; anonimización acotada a una tabla |
 | D4 | Los ingresos del mes se imputan por `fecha_recepcion` | Coherente con el resto de la regla de caja. La vista esperado vs recibido usa `pago_esperado.periodo` |
 | D5 | El monto inicial del arriendo es la primera fila de `contrato_monto` | Única fuente de verdad; el reajuste deja de ser un caso especial |
@@ -972,11 +1001,13 @@ la serie diaria, y §6, donde la conversión UF → CLP se define por período y
 | D7 | `pago_esperado` se persiste con el monto del mes como snapshot | Los abonos necesitan una FK estable; el reajuste retroactivo dispara un recálculo explícito |
 | D8 | El estado del pago y la fecha de completitud se derivan | Dependen de la fecha actual y del monto esperado vigente |
 | D9 | El comprobante de arriendo se vincula al abono, no al pago esperado | El comprobante acredita un hecho, no una expectativa |
-| D10 | `aporte_capital.movimiento_financiero_id` opcional, sin efecto en el cálculo | Da trazabilidad sin contaminar el flujo neto antes de aportes |
+| D10 | *(retirada)* `aporte_capital` se canceló por decisión de producto (T08) | El MVP no registra aportes de capital; se conserva el número para no alterar referencias |
 | D11 | `UNIQUE(propiedad_id)` en el crédito | Un crédito por propiedad; retirarlo sería una migración no destructiva |
 | D12 | Vigencia del contrato derivada de las fechas, sin columna `estado` | Una terminación anticipada se registra actualizando `fecha_termino` |
-| D13 | Categorías, tipos y motivos como `ENUM` con valor `OTRO` | Añadir un valor es una migración, no un rediseño |
+| D13 | Categorías y tipos como `ENUM` con valor `OTRO` | Añadir un valor es una migración, no un rediseño |
 | D14 | Valor de compra con moneda explícita | En Chile la compra suele pactarse en UF |
+| D15 | El desglose de un gasto es una entidad hija (`movimiento_concepto`) y el total se guarda en `movimiento_financiero.monto_clp` | T09 y las agregaciones no cambian ni pueden contar un gasto dos veces; los movimientos existentes quedan como gastos simples sin migrar datos |
+| D16 | Al editar un movimiento, `conceptos` ausente conserva el desglose, `[]` lo convierte en simple y una lista lo reemplaza | Un cliente que desconoce los conceptos no los pierde por omisión; la pérdida exige una acción explícita |
 
 ### 10.2 Propuestas a validar
 

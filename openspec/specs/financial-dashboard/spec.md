@@ -2,16 +2,16 @@
 
 ## Purpose
 
-Consultar el flujo financiero mensual de la cartera y de cada propiedad —ingresos, dividendos, otros egresos, flujo neto antes de aportes, estado de pagos del mes contractual y saldo de créditos en UF— calculado al consultar por regla de caja, sin persistir derivados. Aportes de capital (T08) y equivalente en CLP de la UF (T10) quedan fuera.
+Consultar el flujo financiero mensual de la cartera y de cada propiedad —ingresos, dividendos, otros egresos, flujo neto, estado de pagos del mes contractual y saldo de créditos en UF— calculado al consultar por regla de caja, sin persistir derivados. El equivalente en CLP de la UF (T10) queda fuera.
 
 ## Requirements
 
 ### Requirement: Totales mensuales por regla de caja
-El sistema SHALL calcular, para un mes `YYYY-MM`, los ingresos recibidos como la suma de `abono_arriendo.monto_clp` con `fecha_recepcion` en el mes; los dividendos pagados como la suma de `credito_registro_mensual.dividendo_pagado_clp` con `fecha_pago_dividendo` en el mes; y los otros egresos como la suma de `movimiento_financiero.monto_clp` con `fecha` en el mes. Los egresos totales SHALL ser dividendos más otros egresos, y el flujo neto antes de aportes SHALL ser ingresos menos egresos totales, pudiendo ser negativo. Todos los importes SHALL ser CLP enteros operados sin `Number` (BigInt o Decimal). `periodo` y `pago_esperado.periodo` SHALL NOT intervenir en estos totales. No SHALL persistirse ningún total derivado.
+El sistema SHALL calcular, para un mes `YYYY-MM`, los ingresos recibidos como la suma de `abono_arriendo.monto_clp` con `fecha_recepcion` en el mes; los dividendos pagados como la suma de `credito_registro_mensual.dividendo_pagado_clp` con `fecha_pago_dividendo` en el mes; y los otros egresos como la suma de `movimiento_financiero.monto_clp` con `fecha` en el mes. Los egresos totales SHALL ser dividendos más otros egresos, y el flujo neto SHALL ser ingresos menos egresos totales, pudiendo ser negativo. Todos los importes SHALL ser CLP enteros operados sin `Number` (BigInt o Decimal). `periodo` y `pago_esperado.periodo` SHALL NOT intervenir en estos totales. No SHALL persistirse ningún total derivado.
 
 #### Scenario: Flujo neto negativo
 - **WHEN** un mes tiene 500.000 de ingresos y 650.000 de egresos
-- **THEN** el flujo neto antes de aportes es −150.000
+- **THEN** el flujo neto es −150.000
 
 #### Scenario: Abono cobrado en mes distinto al contractual
 - **WHEN** el pago esperado de marzo recibe un abono con `fecha_recepcion` en abril
@@ -42,7 +42,7 @@ El sistema SHALL calcular, para un mes `YYYY-MM`, los ingresos recibidos como la
 - **THEN** el dividendo se cuenta una sola vez, solo desde el registro mensual del crédito
 
 ### Requirement: Dashboard de cartera
-El sistema SHALL ofrecer `GET /api/dashboard?mes=YYYY-MM` y la página `/dashboard` con los totales mensuales de toda la cartera, el estado de pagos esperados del mes, el saldo de créditos en UF y un resumen por propiedad. El total de cartera SHALL ser igual a la suma de los totales de cada propiedad. Sin `mes`, SHALL usarse el mes de `hoyChile()`. El dashboard SHALL NOT ordenar, puntuar ni comparar propiedades entre sí; el resumen por propiedad SHALL listarse en un orden estable no basado en cifras y enlazar a su detalle. No SHALL mostrar aportes de capital ni equivalentes en CLP de saldos UF.
+El sistema SHALL ofrecer `GET /api/dashboard?mes=YYYY-MM` y la página `/dashboard` con los totales mensuales de toda la cartera, el estado de pagos esperados del mes, el saldo de créditos en UF y un resumen por propiedad. El total de cartera SHALL ser igual a la suma de los totales de cada propiedad. Sin `mes`, SHALL usarse el mes de `hoyChile()`. El dashboard SHALL NOT ordenar, puntuar ni comparar propiedades entre sí; el resumen por propiedad SHALL listarse en un orden estable no basado en cifras y enlazar a su detalle. No SHALL mostrar equivalentes en CLP de saldos UF.
 
 #### Scenario: Total igual a suma de propiedades
 - **WHEN** hay varias propiedades con movimientos en el mes
@@ -68,9 +68,9 @@ El sistema SHALL ofrecer `GET /api/dashboard?mes=YYYY-MM` y la página `/dashboa
 - **WHEN** se consulta el dashboard
 - **THEN** no existe ranking, puntaje ni indicador que ordene propiedades por rendimiento
 
-#### Scenario: Integraciones pendientes
+#### Scenario: Integración pendiente de T10
 - **WHEN** se muestra el dashboard
-- **THEN** los aportes de capital y el saldo en CLP no aparecen como cifras, y se indica que quedan para T08 y T10
+- **THEN** el equivalente en CLP del saldo UF no aparece como cifra y se indica que queda para T10
 
 ### Requirement: Estado de pagos esperados del mes contractual
 El sistema SHALL presentar los pagos esperados cuyo `pago_esperado.periodo` es el mes consultado, con monto esperado, recibido, saldo pendiente, estado (`PENDIENTE`, `PARCIALMENTE_PAGADO`, `VENCIDO`, `PAGADO`) y calificaciones, obtenidos con `calcularEstadoPago` y `hoyChile()`, sin recalcular reglas ni persistir estados. Los abonos SHALL contarse en su totalidad para el pago, sin importar su `fecha_recepcion`.

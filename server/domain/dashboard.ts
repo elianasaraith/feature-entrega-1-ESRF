@@ -10,8 +10,7 @@ export function sumarMontos(montos: string[]): string {
   return total.toString();
 }
 
-// Flujo neto antes de aportes = ingresos − egresos; puede ser negativo. Los
-// aportes de capital (T08) no intervienen.
+// Flujo neto = ingresos − egresos; puede ser negativo.
 export function flujoNeto(ingresosClp: string, egresosClp: string): string {
   return (BigInt(ingresosClp) - BigInt(egresosClp)).toString();
 }

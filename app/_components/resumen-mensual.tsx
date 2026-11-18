@@ -22,7 +22,7 @@ export function ResumenMensual({ totales }: { totales: TotalesDto }) {
         <dd className="border-t pt-2 text-right tabular-nums">$ {formatearClp(totales.egresosTotalesClp)}</dd>
       </div>
       <div className="contents font-semibold">
-        <dt>Flujo neto antes de aportes</dt>
+        <dt>Flujo neto</dt>
         <dd className="text-right tabular-nums">$ {formatearClp(totales.flujoNetoClp)}</dd>
       </div>
     </dl>

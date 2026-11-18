@@ -13,8 +13,8 @@ import { asegurarPropiedad } from "./propiedad-lookup";
 
 // Totales de caja del mes (docs/data-model.md §7.1): ingresos por
 // fecha_recepcion, dividendos por fecha_pago_dividendo y otros egresos por
-// fecha. El período contractual o hipotecario nunca interviene. Aportes de
-// capital (T08) y equivalentes en CLP de la UF (T10) quedan fuera.
+// fecha. El período contractual o hipotecario nunca interviene. Los
+// equivalentes en CLP de la UF (T10) quedan fuera.
 export type TotalesDto = {
   ingresosClp: string;
   dividendosClp: string;

@@ -140,7 +140,7 @@ del dominio. Ninguna de las dos cosas se almacena.
 dominio puro: es la que decide qué filas entran en el mes, y por tanto vive donde se
 consulta. Debe respetar sin excepción las fechas que `data-model.md` §7.1 fija —
 `abono_arriendo.fecha_recepcion`, `movimiento_financiero.fecha`,
-`credito_registro_mensual.fecha_pago_dividendo` y `aporte_capital.fecha` — y nunca
+`credito_registro_mensual.fecha_pago_dividendo` — y nunca
 `credito_registro_mensual.periodo`, que es la mensualidad hipotecaria (§10.5).
 
 ### 5.1 Por qué el dominio se separa de los servicios
@@ -244,11 +244,11 @@ Las vistas se derivan de las historias documentadas, no de una idea previa de ap
 | Vista | Historia | Qué muestra |
 |---|---|---|
 | Cartera | HU01 | Listado de propiedades |
-| Detalle de propiedad | HU01 · HU02 · HU03 | Crédito, contrato vigente, pagos, egresos, aportes y documentos |
+| Detalle de propiedad | HU01 · HU02 · HU03 | Crédito, contrato vigente, pagos, egresos y documentos |
 | Registro mensual del crédito | HU01 | Dividendo pagado y saldo informado por el banco |
 | Contratos y reajustes | HU02 | Contrato, arrendatario, garantía e histórico de montos |
 | Pagos y abonos | HU02 | Esperado frente a recibido, con estado y calificación |
-| Dashboard mensual | HU03 | Ingresos, egresos, flujo neto antes de aportes y aportes |
+| Dashboard mensual | HU03 | Ingresos, egresos y flujo neto |
 
 **Server Components por defecto.** El dashboard y los listados son lectura pura; producirlos
 en el servidor evita enviar al navegador lógica de agregación que no debe estar ahí. Los
@@ -316,7 +316,7 @@ Las capacidades que la API debe cubrir se derivan de `product.md` §5 y de las h
 | Gestión del crédito | Registrar el crédito de una propiedad; registrar el dividendo pagado y el saldo de una mensualidad; consultar la serie histórica |
 | Contratos y arriendos | Registrar un contrato con su arrendatario; **registrar un reajuste**; consultar el histórico de contratos y montos |
 | Pagos de arriendo | Consultar los pagos esperados de un contrato con su estado derivado; **registrar, listar, editar y eliminar abonos** (rutas anidadas bajo propiedad → contrato → pago esperado, T06) |
-| Egresos y aportes | Registrar y consultar movimientos financieros y aportes de capital, con el vínculo opcional entre ellos |
+| Egresos | Registrar y consultar movimientos financieros, simples o desglosados en conceptos. Los conceptos no tienen rutas propias: viajan dentro del movimiento (`conceptos` en el cuerpo y en la respuesta de las mismas rutas) |
 | Documentos | Obtener una URL de subida, registrar la metadata, listar y obtener una URL de lectura |
 | Consulta financiera | Dashboard mensual de cartera y vista mensual de una propiedad |
 
@@ -381,7 +381,8 @@ el modelo de datos sin que nadie lo note hasta que las cifras dejen de cuadrar.
 
 | Qué | Dónde | Por qué |
 |---|---|---|
-| Totales mensuales: ingresos, egresos, aportes, flujo neto | **Agregación en PostgreSQL** | Evita traer filas al proceso solo para sumarlas |
+| Totales mensuales: ingresos, egresos, flujo neto | **Agregación en PostgreSQL** | Evita traer filas al proceso solo para sumarlas. Para los egresos manuales se lee solo `movimiento_financiero.monto_clp`: en un gasto desglosado ya es la suma de sus conceptos, que nunca se suman de nuevo |
+| Total de un gasto desglosado | **Función pura** `sumarConceptos`, al escribir; el resultado se guarda en `movimiento_financiero.monto_clp` | Las agregaciones leen una sola columna y no pueden contar los conceptos dos veces; la interfaz reutiliza la misma función para el total en vivo |
 | Reglas con precedencia: estado del pago, fecha de completitud, calificaciones | **Funciones puras de TypeScript** | Hay que probarlas contra los casos límite de HU02; expresadas como consulta quedarían opacas |
 | Monto vigente del contrato en un mes | **Funciones puras** sobre las filas de `contrato_monto` | Misma razón |
 | Conversión UF → CLP | **Funciones puras**, con el valor del período como parámetro | Mantiene la conversión trazable y comprobable |

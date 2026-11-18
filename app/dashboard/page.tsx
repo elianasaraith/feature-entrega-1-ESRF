@@ -125,8 +125,7 @@ async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
       </section>
 
       <p className="text-xs text-gray-600">
-        Pendiente de otros tickets: aportes de capital (T08) y equivalente en CLP del saldo en UF (T10). El flujo
-        neto es antes de aportes.
+        Pendiente de otro ticket: equivalente en CLP del saldo en UF (T10).
       </p>
     </>
   );

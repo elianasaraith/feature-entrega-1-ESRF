@@ -51,10 +51,11 @@ real.
 ## Dominio
 
 Conceptos del dominio: Propiedad · Crédito hipotecario · Arrendatario · Contrato de
-arriendo · Pago de arriendo · Movimiento financiero · Aporte de inversión · Documento.
+arriendo · Pago de arriendo · Movimiento financiero · Documento.
 
-**Aporte de inversión** se mantiene como concepto explícito: hace falta representar el
-histórico de capital aportado y usarlo en el dashboard.
+**Aportes de capital: cancelados** (T08) por decisión de producto. No se registra capital
+aportado de forma independiente ni hay cifra de aportes en el dashboard; el gasto de una
+propiedad se registra una sola vez, como egreso.
 
 Todavía **no** está decidido si cada concepto será una tabla independiente. Eso se
 resuelve al diseñar el modelo de datos (`docs/data-model.md`).
@@ -77,6 +78,12 @@ Reglas confirmadas:
   seguros, contribuciones, gastos comunes en vacancia, gastos extraordinarios, otros. El
   **dividendo no es un movimiento**: se registra solo en el registro mensual del crédito
   (`docs/data-model.md` §4.10, D1).
+- **Gasto simple o desglosado (implementado):** un movimiento se registra como gasto simple
+  o desglosado en 1 a 50 conceptos con nombre y monto; los conceptos son una entidad hija
+  (`movimiento_concepto`), no movimientos. `monto_clp` del movimiento es siempre el total
+  (la suma de los conceptos) y T09 lee solo ese campo: un gasto desglosado se cuenta una
+  sola vez. Al editar, `conceptos` ausente conserva el desglose y solo `conceptos: []` lo
+  elimina (`docs/data-model.md` §4.14, D15 y D16).
 - Los gastos comunes ordinarios los paga el arrendatario: fuera del control recurrente
   del propietario.
 - El histórico financiero se consulta **por mes**.
@@ -91,7 +98,7 @@ Reglas confirmadas:
 5. Dashboard financiero e histórico mensual
 
 Dashboard: ingresos recibidos, egresos, dividendos, otros gastos, flujo neto mensual,
-aportes históricos de capital, saldo de créditos, estado de pagos de arriendos.
+saldo de créditos, estado de pagos de arriendos.
 No hay comparación entre propiedades.
 
 Autenticación: single-user — email + contraseña + JWT.
@@ -101,7 +108,8 @@ Autenticación: single-user — email + contraseña + JWT.
 Multiusuario y cartera compartida · integración bancaria · conciliación bancaria · pagos
 automáticos · OCR · extracción de contratos con IA · simulador hipotecario · comparación
 entre propiedades · administración ordinaria de gastos comunes · declaración tributaria ·
-proyecciones financieras avanzadas · importador de Excel.
+proyecciones financieras avanzadas · importador de Excel · aportes de capital
+independientes (T08, cancelado).
 
 ## Reglas de trabajo
 

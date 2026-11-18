@@ -32,7 +32,7 @@ cartera. El MVP no tiene otros perfiles.
 La capacidad 4 se reparte con un corte deliberado:
 
 - **HU02** posee el ciclo de vida del pago de arriendo: monto esperado, abonos, estado.
-- **HU03** posee la consolidación financiera: egresos, aportes, flujo neto y dashboard.
+- **HU03** posee la consolidación financiera: egresos, flujo neto y dashboard.
 
 Y el dividendo hipotecario aparece en dos historias con roles distintos:
 
@@ -346,19 +346,16 @@ pagos automáticos, gestión de la garantía, gastos comunes).
 ### Historia
 
 Como propietario-inversor que autogestiona su cartera, quiero consultar el flujo financiero
-de un mes con los ingresos, los egresos y los aportes de capital claramente separados, para
-saber cuál fue el resultado real del período y cuánto capital propio he puesto, sin
-consolidar información a mano.
+de un mes con los ingresos y los egresos claramente separados, para saber cuál fue el
+resultado real del período sin consolidar información a mano.
 
 ### Contexto y alcance
 
 Responde a la pregunta que hoy más trabajo cuesta: qué ocurrió financieramente en un mes.
-Y la responde sin enmascarar el resultado: el capital propio inyectado explica cómo se
-financió un déficit, no lo hace desaparecer.
+Y la responde con el resultado del período: ingresos menos egresos, sin ajustes.
 
 Cubre los ingresos de arriendo recibidos, los dividendos efectivamente pagados, los demás
-egresos e inversiones, los aportes de capital como concepto separado, el flujo neto antes
-de aportes, el dashboard general de cartera, la vista individual por propiedad, el
+egresos e inversiones, el flujo neto, el dashboard general de cartera, la vista individual por propiedad, el
 histórico mensual y el tratamiento de las unidades UF y CLP.
 
 ### Criterios de aceptación
@@ -374,33 +371,22 @@ histórico mensual y el tratamiento de las unidades UF y CLP.
 - **Entonces** los dividendos efectivamente pagados y los otros gastos se presentan por
   separado, en CLP
 
-**Escenario 3 — Flujo neto antes de aportes**
+**Escenario 3 — Flujo neto**
 - **Dado** un mes con 500.000 CLP de ingresos y 650.000 CLP de egresos
-- **Cuando** consulto el flujo neto antes de aportes
+- **Cuando** consulto el flujo neto
 - **Entonces** obtengo −150.000 CLP
 
-**Escenario 4 — El aporte no neutraliza el resultado**
-- **Dado** ese mismo mes con un aporte de capital de 150.000 CLP
-- **Cuando** consulto el dashboard
-- **Entonces** el flujo neto antes de aportes sigue siendo −150.000 CLP y el aporte figura
-  como una cifra separada de 150.000 CLP
-
-**Escenario 5 — Inversión financiada con capital propio**
-- **Dado** una remodelación de 2.000.000 CLP financiada con dinero propio
-- **Cuando** consulto el mes
-- **Entonces** el egreso por la remodelación figura entre los egresos y el aporte de
-  capital de 2.000.000 CLP figura aparte, sin que ninguno sustituya al otro
-
-**Escenario 6 — Aportes del mes y acumulados**
-- **Dado** varios meses con aportes de capital registrados
-- **Cuando** consulto el dashboard
-- **Entonces** obtengo el aporte del mes y el acumulado histórico de capital propio
+**Escenarios 4, 5 y 6 — retirados (T08 cancelado)**
+Cubrían el aporte de capital como cifra separada del flujo neto, la inversión financiada
+con capital propio y el aporte del mes y acumulado. Se retiraron por decisión de producto:
+el MVP no registra aportes de capital. Se conserva la numeración para no alterar las
+referencias a los demás escenarios.
 
 **Escenario 7 — Vista individual por propiedad**
 - **Dado** un mes y una propiedad de la cartera
 - **Cuando** consulto la vista de esa propiedad
 - **Entonces** obtengo su crédito, su contrato vigente, sus pagos esperados y recibidos,
-  sus egresos y sus aportes de ese mes
+  sus egresos de ese mes
 
 **Escenario 8 — El saldo de los créditos se mantiene en UF**
 - **Dado** un mes con saldos de crédito registrados
@@ -425,10 +411,9 @@ histórico mensual y el tratamiento de las unidades UF y CLP.
 - **Entonces** obtengo el estado de los pagos de arriendo del mes
 
 **Caso límite 12 — Mes sin movimientos**
-- **Dado** un mes sin ingresos, egresos ni aportes registrados
+- **Dado** un mes sin ingresos ni egresos registrados
 - **Cuando** lo consulto
-- **Entonces** el mes se presenta con sus cifras en cero, incluido un flujo neto antes de
-  aportes de 0 CLP
+- **Entonces** el mes se presenta con sus cifras en cero, incluido un flujo neto de 0 CLP
 
 **Caso límite 13 — Gastos comunes durante la vacancia**
 - **Dado** una propiedad sin arrendatario durante un mes, cuyos gastos comunes pagó el
@@ -442,16 +427,35 @@ histórico mensual y el tratamiento de las unidades UF y CLP.
 - **Entonces** obtengo los agregados del conjunto y puedo abrir cada propiedad por
   separado, sin ranking, puntuación ni indicador que ordene una propiedad frente a otra
 
+**Escenario 15 — Gasto desglosado en conceptos**
+- **Dado** una reparación con Materiales 60.000, Mano de obra 70.000 y Transporte 20.000
+- **Cuando** la registro como un único gasto desglosado
+- **Entonces** el movimiento tiene un total de 150.000 CLP, sus tres conceptos figuran bajo
+  él y el dashboard del mes cuenta 150.000 una sola vez en los egresos, no 300.000
+
+**Escenario 16 — Convertir entre gasto simple y desglosado**
+- **Dado** un gasto simple de 100.000 CLP
+- **Cuando** lo edito desglosándolo en conceptos que suman 150.000 CLP
+- **Entonces** su total pasa a 150.000 CLP y el dashboard refleja 150.000, no 250.000
+- **Y** cuando lo convierto de nuevo en gasto simple indicando su monto, sus conceptos se
+  eliminan y el dashboard cuenta ese monto una sola vez
+
+**Caso límite 17 — Editar sin mencionar los conceptos no los pierde**
+- **Dado** un gasto desglosado de 150.000 CLP
+- **Cuando** edito solo su fecha o su descripción, sin enviar conceptos
+- **Entonces** conserva todos sus conceptos y su total
+- **Y** si indico un monto distinto de su total, el sistema lo rechaza sin modificar nada
+
 ### Reglas de negocio relacionadas
 
-- Un egreso o inversión es uso de recursos de la propiedad. Un aporte de capital es dinero
-  propio incorporado por el propietario. Son conceptos distintos: una inversión
-  capitalizable no es un aporte por sí misma, y financiar una inversión con dinero propio
-  genera ambos registros.
-- El aporte de capital no se cuenta como egreso del mes.
-- El flujo neto antes de aportes es el resultado del período mensual: ingresos de la
-  operación menos egresos de la inversión. Los aportes se informan aparte y no lo
-  neutralizan.
+- Un egreso o inversión es uso de recursos de la propiedad y se registra una sola vez.
+- El flujo neto es el resultado del período mensual: ingresos de la operación menos
+  egresos de la inversión.
+- Un gasto puede registrarse simple o desglosado en conceptos con montos individuales; la
+  suma de los conceptos es el total del movimiento y se cuenta una sola vez en los
+  egresos. Los conceptos no son movimientos independientes. Editar un gasto desglosado sin
+  enviar sus conceptos los conserva; solo se eliminan al convertirlo explícitamente en
+  gasto simple.
 - Las métricas consolidadas del flujo se expresan en CLP; los datos contractuales del
   crédito conservan su unidad en UF.
 - El valor de la UF se obtiene de una API pública chilena. El sistema no lo estima ni lo
@@ -480,8 +484,8 @@ histórico mensual y el tratamiento de las unidades UF y CLP.
 
 ### Trazabilidad
 
-`product.md` §5.4 y §5.5 (alcance) · §6.4, apartados de movimientos financieros y aportes
-de capital · §6.5 completo, incluidos flujo neto antes de aportes, moneda y
-reproducibilidad del histórico · §7.1 (reglas de egreso, aporte, flujo y moneda) · §7.2
+`product.md` §5.4 y §5.5 (alcance) · §6.4, apartado de movimientos financieros · §6.5
+completo, incluidos flujo neto, moneda y
+reproducibilidad del histórico · §7.1 (reglas de egreso, flujo y moneda) · §7.2
 (sin comparación, sin cierre) · §8 (comparación, proyecciones, cierre mensual, tributario,
 importador).

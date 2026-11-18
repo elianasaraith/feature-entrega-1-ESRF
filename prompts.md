@@ -20,13 +20,13 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 | Herramienta | Uso en RealtyTrack |
 |---|---|
-| Claude Code (extensión de VS Code) | Asistente de código en todas las fases: documentación de la Entrega 1 y desarrollo de T01–T05 y T12 |
-| OpenSpec | Flujo Spec-Driven Development: `openspec/specs/` (6 capacidades) y `openspec/changes/archive/` (7 cambios archivados: fundación, autenticación, propiedades, créditos, registro mensual, contratos, reajustes) |
+| Claude Code (extensión de VS Code) | Asistente de código en todas las fases: documentación de la Entrega 1 y desarrollo de T01–T07, T09 y T12, más la ampliación de T07 con desglose de conceptos; T08 se exploró, se implementó localmente y se canceló |
+| OpenSpec | Flujo Spec-Driven Development: `openspec/specs/` (9 capacidades) y `openspec/changes/archive/` (11 cambios archivados: fundación, autenticación, propiedades, créditos, registro mensual, contratos, reajustes, abonos de arriendo, movimientos financieros, dashboard financiero y la retirada de T08 del dashboard). Al 2026-11-15, el cambio `t07-desglose-movimientos` está activo, verificado y sin archivar |
 | Comandos y skills del repositorio | `.claude/commands/opsx/` (explore, propose, apply, verify, archive…) y `.claude/skills/` (skills `openspec-*`) |
 
-**Modelos.** Claude, a través de Claude Code. En la sesión de T05 el modelo fue **Claude
-Sonnet 5.5**; el modelo de las sesiones anteriores no quedó registrado en el repositorio y
-no se afirma aquí.
+**Modelos.** Claude, a través de Claude Code. En la sesión de T05 y en la sesión que cubre T08 y la ampliación de T07 (desglose) el modelo
+fue **Claude Sonnet 5.5**, según lo informa Claude Code; el modelo de las demás sesiones no quedó
+registrado en el repositorio y no se afirma aquí.
 
 **Contexto avanzado (respaldado por el repositorio).**
 
@@ -43,7 +43,7 @@ no se afirma aquí.
 
 ## Workflows representativos
 
-Cinco workflows concentran el uso de IA; el detalle de los prompts está en las secciones
+Siete workflows concentran el uso de IA; el detalle de los prompts está en las secciones
 indicadas.
 
 | # | Workflow | Qué demuestra | Dónde |
@@ -53,6 +53,8 @@ indicadas.
 | W3 | Créditos y registro mensual (T02, T03) | Aislamiento de la base de pruebas comprobado por componentes, no por texto | Sección 6, «T03 — ajustes… / refuerzo…» |
 | W4 | Contratos (T04) | Migraciones escritas por la IA y aplicadas solo con verificación y autorización | Sección 6, «T04 — gestión de contratos…» |
 | W5 | Montos, reajustes y pagos esperados (T05): explore → plan → propose → apply → verify → archive | Ciclo completo con el plan corregido por la persona, validación manual y archivo | Sección 6, «T05 — montos…» y abajo |
+| W6 | Cancelación y retirada de T08 (aportes de capital) | Una decisión de producto aplicada sin perder el historial: se retiró solo el código de T08, se conservó la migración histórica, la persona aplicó la migración de retiro y el change no se archivó como implementado | Sección 6, «T08 — …» |
+| W7 | Ampliación de T07 con desglose de conceptos: explore → propose → corrección del `PUT` → apply por etapas → verify | Diseño corregido antes de implementar por una precondición de la persona; seis etapas con detención al final de cada una, migración aplicada por la persona y verificación sin marcar como ejecutado lo que no corrió | Sección 6, «T07 — ampliación…» |
 
 **W5 en detalle (hechos del desarrollo de T05).** Se pidió explorar T05 sin modificar
 archivos; la IA presentó un plan, la persona **lo rechazó con seis ajustes** (interfaz
@@ -68,10 +70,13 @@ generar los artefactos OpenSpec. Después se implementó, se verificó contra lo
 |---|---|
 | **Control del alcance del MVP**: la persona acota cada cambio y prohíbe adelantar tickets («No implementes T05 ni T06», «No implementes abonos… T06 o T07») | Prompts de T04 y T05 (sección 6) |
 | **Corrección de propuestas de la IA**: se rechazó dividir el backlog en tickets T13/T14 por capa; se rechazó el plan v1 de T05 | Sección 6, Prompt 2; W5 |
-| **Revisión y aprobación de migraciones**: la IA solo escribe el SQL; se verifica su contenido y la base de destino, y se aplica primero a `realtytrack_test` y a desarrollo solo con autorización explícita; las migraciones las aplica la persona | Prompts de T04 y T05; `tasks.md` del cambio archivado `implement-rent-adjustments` (tarea 1.3) |
+| **Revisión y aprobación de migraciones**: la IA solo escribe el SQL; se verifica su contenido y la base de destino, y se aplica primero a `realtytrack_test` y a desarrollo solo con autorización explícita; las migraciones las aplica la persona | Prompts de T04 y T05; `tasks.md` del cambio archivado `implement-rent-adjustments` (tarea 1.3); prompts de T08 y de la ampliación de T07 (sección 6) |
 | **Aislamiento de la base de pruebas**: las pruebas de integración solo escriben en `TEST_DATABASE_URL`, distinta de `DATABASE_URL`/`DIRECT_URL`, comparando host, puerto, base y schema | Prompts de T01 y T03; `tests/setup/test-db.ts` |
 | **Validación manual de funcionalidades**: la persona verificó en la interfaz el primer monto, el 409 por período repetido y el 422 por período fuera de vigencia antes de cerrar la tarea 5.4 | `tasks.md` archivado de `implement-rent-adjustments` |
 | **Decisión de producto sobre una regla técnica**: aceptar el 409 del PUT de contratos solo cuando acortar el término deje fuera montos o pagos existentes | Prompt de T05 |
+| **Decisión de producto sobre el alcance**: cancelar T08 (aportes de capital), conservar el gasto como egreso único y ampliar T07 con un desglose opcional | Prompts de retirada de T08 y de ampliación de T07 (sección 6); `docs/product.md` §6.4 |
+| **Protección de datos antes de implementar**: la persona pidió comprobar que el `PUT` no elimine los conceptos cuando se omiten; el diseño aprobado no lo garantizaba, se corrigió y se confirmó la opción A | Prompt de la ampliación de T07 (sección 6); `docs/data-model.md` D16 |
+| **Veracidad de la verificación**: se prohibió marcar como ejecutadas las pruebas que no pudieron correr y las visuales sin abrir la aplicación; la revisión visual del desglose consta como parcial | Prompts de las etapas 4 y 5 del desglose; `docs/work-tickets.md` §4.7 |
 
 ---
 
@@ -409,9 +414,11 @@ generar los artefactos OpenSpec. Después se implementó, se verificó contra lo
 
 *Implementación posterior, con OpenSpec, de T01 (Gestión de propiedades) y T03 (Registro mensual de dividendo y saldo del crédito, cuya capa de base de datos ilustra el «Ticket 3» del README): fragmentos de los mensajes que aprobaron cada plan y fijaron sus precisiones. Los criterios de T03 se verificaron con pruebas unitarias, pruebas de integración contra una BD de pruebas aislada y una verificación manual en la interfaz.*
 
-*Registro complementario de la fase de implementación (W2–W5 de «Workflows
+*Registro complementario de la fase de implementación (W2–W7 de «Workflows
 representativos»). No cuenta como prompts principales adicionales de esta sección: agrupa
-los mensajes de apply de T01 a T05 con las restricciones que se dieron a la IA.*
+los mensajes de apply de T01 a T09, de la retirada de T08 y de la ampliación de T07 con las
+restricciones que se dieron a la IA. En las dos últimas entradas, las frases entre comillas
+son fragmentos literales de los mensajes de la sesión; lo demás es un resumen del recorrido.*
 
 **T01 — precisiones de autenticación, pruebas de integración y validaciones:**
 
@@ -460,6 +467,85 @@ los mensajes de apply de T01 a T05 con las restricciones que se dieron a la IA.*
 **T09 — dashboard financiero (apply de `t09-dashboard-financiero`):**
 
 > Implementa completamente el change OpenSpec `t09-dashboard-financiero`: dashboard de cartera en `/dashboard` y resumen mensual en `/propiedades/[id]` (datos, resumen del mes, actividad reciente con abonos, dividendos y movimientos en orden descendente, accesos), con un único `dashboard-service`, `GET /api/dashboard` y `GET /api/propiedades/[id]/resumen-mensual`. Totales por fecha de caja, estados de pago con `calcularEstadoPago`, saldo UF hasta el mes consultado, BigInt/Decimal sin `Number`, sin aportes (T08) ni conversión UF→CLP (T10), sin tablas, migraciones ni cachés. Aplica `router.refresh()` o `revalidatePath` solo si se demuestra necesario. Ejecuta TypeScript, lint, pruebas y build si el entorno lo permite; si PostgreSQL no es accesible identifica las pruebas pendientes sin marcarlas como aprobadas. Sin commit ni push, sin operaciones destructivas, y no declares T09 verificado si faltan pruebas o revisión manual.
+
+
+**T08 — aportes de capital: exploración, implementación local y cancelación (changes `t08-aportes-capital` y `retirar-aportes-dashboard`):**
+
+*Resumen del recorrido.* Se pidió explorar T08 sin modificar archivos. La persona aprobó el
+diagnóstico con doce decisiones (CRUD de aportes por propiedad, vínculo opcional y solo de
+trazabilidad con un movimiento de T07, `ON DELETE SET NULL`, aporte mensual y acumulado por
+fecha de caja, integración mínima con el dashboard) y se generó el change `t08-aportes-capital`
+(validado en modo estricto). Se aplicó por etapas: modelo Prisma y migración
+`20261114120000_add_aporte_capital` (aplicada por la persona en sus bases locales), dominio y
+servicio, API y pantalla CRUD. T08 nunca se commiteó ni se archivó. Antes de integrarlo, la
+persona lo canceló por decisión de producto; la IA retiró solo su código y sus pruebas,
+conservó la migración histórica y generó la de retiro `20261115120000_drop_aporte_capital`
+(aplicada en PostgreSQL local según declaró la persona), borró el change sin archivarlo como
+implementado y actualizó `CLAUDE.md`, `docs/`, diagramas y `readme.md`. Un change mínimo
+(`retirar-aportes-dashboard`) renombró «Flujo neto antes de aportes» a «Flujo neto» en el spec
+y en la interfaz sin tocar fórmulas, DTO ni contratos; se verificó y se archivó.
+
+> «Necesito una exploración de solo lectura, breve y enfocada, antes de crear el change OpenSpec.»
+>
+> «No ejecutes migraciones contra bases de datos. Genera la migración y detente para que yo la revise y aplique desde mi terminal.»
+>
+> «Vamos a retirar definitivamente T08: Aportes de capital del MVP RealtyTrack.»
+>
+> «No necesitamos registrar aportes de capital independientes.» · «T09 debe conservar sus cálculos actuales.» · «Más adelante evaluaremos un desglose opcional de conceptos dentro de T07, pero NO lo implementaremos ahora.»
+>
+> «Conservar la migración histórica add_aporte_capital y generar una nueva migración de retiro.» · «No utilizar git clean ni restauraciones masivas.» · «Retirar el change activo t08-aportes-capital sin archivarlo como implementado.»
+
+**T07 — ampliación con desglose de conceptos (change `t07-desglose-movimientos`):**
+
+*Resumen del recorrido.* Exploración de solo lectura (modelo Prisma, servicio, esquemas, rutas,
+interfaz y pruebas de T07, y cómo T09 agrega los gastos), con una propuesta de entidad hija
+y la comparación entre guardar el total o calcularlo. La persona aprobó doce decisiones
+técnicas y se generó el change (proposal, design, specs y tasks, validado en modo estricto).
+Antes de implementar, la persona pidió comprobar que el `PUT` protegiera los conceptos cuando
+el campo se omite; la IA reportó que el diseño aprobado lo hacía al revés (omitirlo convertía
+el gasto en simple y borraba el desglose), presentó dos opciones y la persona confirmó la
+**opción A** con cinco reglas, tras lo cual se actualizaron y revalidaron los artefactos. El
+apply se hizo en seis etapas, deteniéndose al final de cada una a la espera de autorización:
+Prisma y migración `20261116120000_add_movimiento_concepto` (la IA la generó sin conexión y se
+detuvo; la persona la aplicó en `realtytrack` y `realtytrack_test`), dominio, esquemas Zod y
+servicio, API con pruebas HTTP, interfaz, pruebas de integración con T09 y documentación. La
+persona ejecutó localmente las pruebas de integración y de T09, la suite completa y el build,
+y la consulta de integridad en `realtytrack_test`; la sandbox de la IA no alcanzaba PostgreSQL
+y la IA no marcó como ejecutado lo que no pudo correr. La verificación visual es **parcial**:
+solo se confirmó la conversión de un gasto simple en uno desglosado con tres conceptos y total
+de 150.000 CLP.
+
+> «Un movimiento financiero puede ser simple o desglosado.» · «Los conceptos no son movimientos independientes.» · «El dashboard contabiliza una sola vez el total del movimiento.»
+>
+> «Apruebo el diagnóstico de ampliación de T07 y confirmo las decisiones técnicas:» (entre ellas: «Guardar el total calculado en MovimientoFinanciero.montoClp.», «Utilizar ON DELETE CASCADE para los conceptos.» y «Limitar a 50 conceptos y 100 caracteres por nombre.»)
+>
+> «Verifica que la semántica de PUT proteja los conceptos existentes cuando el campo conceptos se omite. Si el diseño todavía no contempla esta protección, detente y repórtalo antes de implementar.»
+>
+> «Confirmo la **opción A** para t07-desglose-movimientos.»
+>
+> «IMPORTANTE: Implementa únicamente la ETAPA 1 (modelo Prisma y migración). Detente al terminarla y espera mi aprobación.» · «No ejecutar prisma migrate dev ni migrate deploy.»
+>
+> «No marcar pruebas visuales como ejecutadas si no pudiste abrir la aplicación.» · «No marcar como ejecutadas pruebas que no hayan podido correr.»
+
+*Reglas del `PUT` de la opción A (resumen, no cita textual):* sin `conceptos`, un gasto simple
+se edita como siempre y un desglosado conserva sus conceptos y su total (acepta `montoClp`
+omitido o igual al total; uno distinto da 422 sin modificar nada); `conceptos: []` lo convierte
+explícitamente en simple, exige un monto positivo y elimina los conceptos de forma atómica;
+`conceptos: null` da 400; una lista de conceptos reemplaza el desglose completo y el total se
+recalcula en el servidor.
+
+*Decisiones técnicas registradas* (el detalle vive en `docs/data-model.md` §4.14, D15 y D16, y
+en el change `t07-desglose-movimientos`):
+
+| Decisión | Origen | Evidencia |
+|---|---|---|
+| Un movimiento padre con conceptos opcionales: entidad hija `movimiento_concepto`; sin conceptos = gasto simple, sin columna que lo marque | Propuesta de la IA en la exploración; aprobada por la persona | `docs/data-model.md` §4.14 |
+| El total se calcula en el backend con `bigint` y se guarda en `movimiento_financiero.monto_clp` | Decisión de la persona | `docs/data-model.md` §4.10 y D15; `server/domain/movimiento-desglose.ts` |
+| El `PUT` protege el desglose cuando se omite `conceptos`; solo `[]` lo elimina | La persona detectó el riesgo y confirmó la opción A; la IA propuso las alternativas | `docs/data-model.md` D16; spec `financial-movements` |
+| Reemplazo atómico del desglose (borrado explícito y reinserción en una transacción) | Requisito de la persona; mecanismo propuesto por la IA | `design.md` del change; pruebas de servicio |
+| T09 contabiliza solo el total del padre, sin leer ni sumar conceptos | Decisión de la persona (T09 sin cambios); pruebas escritas por la IA y ejecutadas por la persona | `tests/dashboard/dashboard-sin-conceptos.test.ts` y pruebas de T09 |
+| Migraciones: la IA genera el SQL sin conexión; la persona lo revisa y lo aplica | Decisión de la persona | Prompts de T08 y de la etapa 1 del desglose |
+| Verificación: pruebas ejecutadas localmente por la persona; revisión visual parcial | Declarado por la persona | `docs/work-tickets.md` §4.7 |
 
 ---
 

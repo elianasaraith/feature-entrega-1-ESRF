@@ -225,8 +225,29 @@ model MovimientoFinanciero {
   createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  propiedad Propiedad @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
+  propiedad Propiedad            @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
+  conceptos MovimientoConcepto[]
 
   @@index([propiedadId, fecha])
   @@map("movimiento_financiero")
+}
+
+// Concepto de un gasto desglosado (T07, ampliación). Es parte del movimiento
+// (composición), no un movimiento independiente: `monto_clp` del padre es el total
+// y la suma de los conceptos, que mantiene el servicio. ON DELETE CASCADE: al
+// eliminar el movimiento desaparecen sus conceptos. El CHECK (monto_clp > 0) vive
+// en la migración SQL. Un movimiento sin conceptos es un gasto simple.
+model MovimientoConcepto {
+  id                     String   @id @default(uuid()) @db.Uuid
+  movimientoFinancieroId String   @map("movimiento_financiero_id") @db.Uuid
+  nombre                 String
+  montoClp               Decimal  @map("monto_clp") @db.Decimal(14, 0)
+  orden                  Int
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  movimiento MovimientoFinanciero @relation(fields: [movimientoFinancieroId], references: [id], onDelete: Cascade)
+
+  @@index([movimientoFinancieroId])
+  @@map("movimiento_concepto")
 }

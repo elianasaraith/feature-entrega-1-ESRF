@@ -47,8 +47,8 @@ repiten íntegras en cada uno.
 | T05 | Reajustes de arriendo y generación de pagos esperados | backend | HU02 | T04 |
 | T06 | Registro de abonos y estado del pago de arriendo | backend | HU02 | T05 |
 | T07 | Movimientos financieros (egresos e inversiones) | full-stack | HU03 | T01 |
-| T08 | Aportes de capital | full-stack | HU03 | T01 |
-| T09 | Dashboard financiero mensual | full-stack | HU03 | T03 · T06 · T07 · T08 · T10 |
+| T08 | ~~Aportes de capital~~ *(cancelado por decisión de producto)* | — | — | — |
+| T09 | Dashboard financiero mensual | full-stack | HU03 | T03 · T06 · T07 · T10 |
 | T10 | Integración con la API de UF | transversal | — | — |
 | T11 | Almacenamiento de documentos | transversal | — | T01 (siempre) · T02/T04/T06 (por vínculo) |
 | T12 | Acceso protegido de usuario único | transversal | — | — |
@@ -489,7 +489,7 @@ de dinero.
 
 **Componentes y capas arquitectónicas:**
 - UI: `app/propiedades/[id]/movimientos` (`architecture.md` §7).
-- API: Route Handler de movimientos, capacidad "Egresos y aportes" (`architecture.md`
+- API: Route Handler de movimientos, capacidad "Egresos" (`architecture.md`
   §8.3).
 - Persistencia: `categoria_movimiento` como `ENUM` sin `DIVIDENDO` (`data-model.md`
   §4.10).
@@ -536,49 +536,73 @@ Implementado y verificado: pruebas automatizadas, build, migración en pruebas y
   (prueba en `tests/auth/proxy.test.ts`); `requireSession` solo funciona en el runtime de
   Next.js.
 
+**Ampliación: desglose opcional en conceptos (cambio OpenSpec `t07-desglose-movimientos`).**
+Un movimiento puede ser **simple** (como hasta ahora) o **desglosado** en 1 a 50 conceptos
+con nombre (1–100 caracteres, repetidos permitidos) y monto CLP entero > 0. Los conceptos no
+son movimientos: el movimiento sigue siendo uno solo.
+- *Modelo:* entidad hija `movimiento_concepto` (`data-model.md` §4.14): `id`,
+  `movimiento_financiero_id` (`ON DELETE CASCADE`), `nombre`, `monto_clp` (`CHECK > 0`),
+  `orden`, timestamps e índice por movimiento. Migración aditiva
+  `20261116120000_add_movimiento_concepto`, generada sin conexión; no altera
+  `movimiento_financiero` ni modifica filas (sin relleno: los movimientos existentes son
+  gastos simples). Un movimiento es desglosado si tiene conceptos; no hay columna que lo marque.
+- *Total:* `movimiento_financiero.monto_clp` es el total y la suma de los conceptos; la
+  calcula el servidor con `bigint` (`sumarConceptos`, `server/domain/movimiento-desglose.ts`).
+  Si el cliente envía `montoClp` con conceptos, debe coincidir (422). La suma no puede exceder
+  14 dígitos (422).
+- *Validación:* `movimientoInputSchema` (alta) y `movimientoEdicionSchema` (edición).
+  `conceptos: null` y los errores de formato → 400 (con claves como `conceptos.0.nombre`);
+  montos ≤ 0 o inconsistentes → 422. Los límites de 50 conceptos y 100 caracteres se aplican
+  en el esquema Zod.
+- *Reglas del `PUT`:* `conceptos` **ausente** conserva el desglose (acepta `montoClp` omitido
+  o igual al total vigente; uno distinto → 422 sin modificar nada); **`[]`** convierte en
+  simple, exige `montoClp` > 0 y elimina los conceptos de forma atómica; **una lista** reemplaza
+  el desglose completo (`$transaction`: borrado y reinserción) y recalcula el total. En un
+  simple, omitir `montoClp` es un 400, como antes. Un rechazo (400 o 422) no modifica nada.
+- *Compatibilidad:* mismas rutas; la respuesta añade `conceptos` (`[]` en los simples). Los
+  clientes anteriores siguen funcionando y no pierden conceptos por omisión.
+- *T09 sin cambios:* `dashboard-service` lee solo `monto_clp` del movimiento (sin `include`
+  ni JOIN con `movimiento_concepto`), por lo que un gasto desglosado se cuenta una sola vez;
+  fórmulas, DTO y consultas intactos.
+- *Interfaz:* el mismo `movimientos-panel.tsx`: opción «Desglosar en conceptos», filas
+  dinámicas (máximo 50), total en vivo con la función de dominio, aviso al convertir un
+  desglosado en simple, conceptos visibles bajo su movimiento en el listado y edición con los
+  conceptos precargados.
+- *Pruebas:* unitarias (`movimiento-desglose`, esquemas y la guarda estática
+  `dashboard-sin-conceptos`), de integración del servicio y de T09 (un desglosado de 150.000 se
+  cuenta una vez; editar a 160.000, convertir y eliminar se reflejan; SQL de T09 sin tocar
+  `movimiento_concepto`) y HTTP de las rutas con sesión simulada
+  (`movimiento-api.integration.test.ts`).
+- *Verificado (por el usuario, PostgreSQL local):* migración aplicada en `realtytrack` y
+  `realtytrack_test`; pruebas de integración del servicio, HTTP y de T09 aprobadas; suite
+  completa (`npm test`) sin fallos; `npm run build` correcto; consulta de integridad
+  (`data-model.md` §4.14) con 0 filas inconsistentes en `realtytrack_test`.
+- *Revisión visual parcial:* solo se confirmó en el navegador la conversión de un gasto simple
+  existente en uno desglosado con tres conceptos y total de 150.000 CLP. Siguen **sin
+  confirmar** los demás flujos: alta desglosada, edición de conceptos, desglosado → simple con
+  su aviso, errores 400/422, eliminación y límites de la interfaz.
+
 ---
 
-### 4.8 T08 — Aportes de capital
+### 4.8 T08 — Aportes de capital *(cancelado)*
 
-**Tipo:** full-stack · **Historia de usuario:** HU03
+**Estado: cancelado por decisión de producto.** No forma parte del MVP y no está
+implementado. Se conserva la entrada para no renumerar los tickets ni las referencias.
 
-**Objetivo.** Registrar el capital propio incorporado a una propiedad como concepto
-separado del egreso o inversión que financia, sin que lo sustituya ni lo elimine.
+**Qué era.** El registro de `aporte_capital` por propiedad (motivo y vínculo opcional a un
+movimiento), con el aporte del mes y el acumulado en el dashboard.
 
-**Contexto funcional.** Aporte y uso de fondos son conceptos distintos (`product.md` §6.4,
-§7.1). El aporte no se cuenta como egreso del mes: tratarlo así duplicaría la salida de
-dinero y borraría el resultado real del período.
+**Por qué se canceló.** Se decidió no llevar un registro independiente de capital aportado:
+el gasto de una propiedad se registra una sola vez, como egreso, en T07. T09 conserva sus
+cálculos, sin cifra de aportes.
 
-**Alcance.**
-- Alta de `aporte_capital` por propiedad, con motivo (`PIE_INICIAL`, `CAPITAL_ADICIONAL`,
-  `COBERTURA_DEFICIT`, `OTRO`).
-- Vínculo opcional al `movimiento_financiero` que ese aporte financia, sin efecto en
-  ningún cálculo.
+**Historia de la cancelación.** Se llegó a implementar localmente (modelo, servicio, API y
+pantalla) sin commit y se retiró antes de integrarse. Las migraciones
+`20261114120000_add_aporte_capital` y `20261115120000_drop_aporte_capital` quedan como un par
+de alta y retiro sin efecto neto.
 
-**Criterios de aceptación** (de `user-stories.md`, HU03):
-| # | Escenario | Resumen |
-|---|---|---|
-| AC1 | E4 — El aporte no neutraliza el resultado | El flujo neto antes de aportes se mantiene; el aporte figura como cifra separada |
-| AC2 | E5 — Inversión financiada con capital propio | El egreso y el aporte figuran por separado, sin que ninguno sustituya al otro |
-| AC3 | E6 — Aportes del mes y acumulados | Se obtiene el aporte del mes y el acumulado histórico |
-
-**Entidades involucradas:** `aporte_capital` (`data-model.md` §4.11).
-
-**Componentes y capas arquitectónicas:**
-- UI: `app/propiedades/[id]/aportes` (`architecture.md` §7).
-- API: Route Handler de aportes, capacidad "Egresos y aportes" (`architecture.md` §8.3).
-- Persistencia: FK opcional `movimiento_financiero_id`, sin efecto en el flujo neto
-  (`data-model.md` §4.11).
-
-**Dependencias:** T01 (`propiedad_id`). Reutiliza opcionalmente T07 (FK nulable, no
-bloqueante).
-
-**Fuera de alcance:** agregación del aporte del mes y acumulado en el dashboard (T09
-consume este registro, no lo genera).
-
-**Estrategia de pruebas:**
-- Integración de servicios: alta con y sin vínculo a `movimiento_financiero`; el vínculo
-  se guarda sin participar en ningún cálculo de este ticket.
+**Lo que lo sustituyó (T07).** El gasto se registra una sola vez, como egreso, y se puede
+desglosar en conceptos con montos individuales: ver «Ampliación: desglose» en §4.7.
 
 ---
 
@@ -586,8 +610,8 @@ consume este registro, no lo genera).
 
 **Tipo:** full-stack · **Historia de usuario:** HU03
 
-**Objetivo.** Consultar el flujo financiero de un mes —ingresos, egresos, flujo neto antes
-de aportes, aportes acumulados, saldo de créditos y estado de los pagos— a nivel de
+**Objetivo.** Consultar el flujo financiero de un mes —ingresos, egresos, flujo neto, saldo
+de créditos y estado de los pagos— a nivel de
 cartera y de cada propiedad, sin consolidar información a mano.
 
 **Contexto funcional.** Es la respuesta a la pregunta que más trabajo cuesta hoy: qué
@@ -600,7 +624,7 @@ lo presenta, no lo calcula"*).
 **Alcance.**
 - Agregación por consulta a PostgreSQL de: ingresos (`fecha_recepcion` de los abonos),
   egresos (`movimiento_financiero.fecha` + `credito_registro_mensual.fecha_pago_dividendo`),
-  flujo neto antes de aportes, aportes del mes y acumulados.
+  flujo neto.
 - Vista de cartera y vista individual por propiedad, ambas del mismo servicio de
   agregación.
 - Saldo de los créditos en UF con equivalente en CLP; estabilidad frente a variaciones
@@ -612,15 +636,15 @@ lo presenta, no lo calcula"*).
 | # | Escenario | Resumen |
 |---|---|---|
 | AC1 | E1 — Ingresos del mes | La suma de los abonos del mes, en CLP |
-| AC2 | E3 — Flujo neto antes de aportes | 500.000 de ingresos y 650.000 de egresos dan −150.000 |
-| AC3 | E7 — Vista individual por propiedad | Crédito, contrato vigente, pagos, egresos y aportes de ese mes |
+| AC2 | E3 — Flujo neto | 500.000 de ingresos y 650.000 de egresos dan −150.000 |
+| AC3 | E7 — Vista individual por propiedad | Crédito, contrato vigente, pagos y egresos de ese mes |
 | AC4 | E9 — Estabilidad frente a variaciones posteriores de la UF | Un mes histórico produce las mismas cifras aunque la UF cambie después |
 | AC5 | E11 — Estado de los pagos en el dashboard | Se obtiene el estado de cada pago del mes |
 | AC6 | CL12 — Mes sin movimientos | Cifras en cero, incluido el flujo neto en 0 |
 | AC7 | CL14 — Agregar no es comparar | El dashboard agrega el conjunto y abre cada propiedad, sin ranking |
 
 **Entidades involucradas:** ninguna propia; lee `abono_arriendo` (T06),
-`movimiento_financiero` (T07), `aporte_capital` (T08), `credito_registro_mensual` (T03),
+`movimiento_financiero` (T07), `credito_registro_mensual` (T03),
 `valor_uf_periodo` (T10), y el estado derivado de `pago_esperado` (T06).
 
 **Componentes y capas arquitectónicas:**
@@ -630,7 +654,7 @@ lo presenta, no lo calcula"*).
   de caja (`architecture.md` §10.1, §10.2, §10.5).
 - Persistencia: sin tabla de resumen ni caché (`architecture.md` §10.3).
 
-**Dependencias:** T03 · T06 · T07 · T08 · T10.
+**Dependencias:** T03 · T06 · T07 · T10.
 
 **Fuera de alcance:** determinación del estado del pago (T06 lo calcula; este ticket lo
 presenta); comparación entre propiedades y proyecciones financieras (`product.md` §8).
@@ -662,9 +686,13 @@ Implementado y verificado: suite completa, build y revisión manual (ver abajo);
   propiedad en el orden de `propiedadService.listar`, sin ranking) y `/propiedades/[id]`
   con datos → resumen del mes → actividad reciente (abonos, dividendos y movimientos, fecha
   descendente, desempate por origen e id, con enlaces) → accesos. Enlace desde `app/page.tsx`.
-- *Dependencias futuras, no incluidas:* aportes de capital y aportes acumulados (**T08**) y
-  equivalente en CLP del saldo en UF y AC4 (**T10**). La interfaz no muestra cifras ni ceros
-  para ellos; el flujo neto es «antes de aportes».
+- *Gastos desglosados (ampliación de T07, §4.7):* T09 contabiliza cada movimiento con su
+  `monto_clp`, que en un gasto desglosado ya es la suma de sus conceptos; no lee ni suma los
+  conceptos (sin `include` ni JOIN con `movimiento_concepto`). Sus fórmulas, DTO y consultas
+  no cambiaron; solo se añadieron pruebas.
+- *Dependencias futuras, no incluidas:* equivalente en CLP del saldo en UF y AC4 (**T10**).
+  La interfaz no muestra cifras ni ceros para ellos. T08 (aportes de capital) se canceló: el
+  flujo neto es simplemente ingresos menos egresos.
 - *Verificación (resultados reales):* TypeScript y lint sin errores y `openspec validate`
   válido (ejecutados en la sesión de desarrollo). El usuario confirmó desde su terminal local
   que `npm test` terminó correctamente y que `npm run build` terminó correctamente (el build
@@ -869,13 +897,13 @@ contraseña (`product.md` §6.7; `architecture.md` §11.1); multiusuario y carte
 | 1. Gestión de propiedades | T01 |
 | 2. Gestión de créditos hipotecarios | T02, T03 |
 | 3. Gestión de contratos y arriendos | T04, T05 |
-| 4. Registro y control de pagos, ingresos y gastos | T06 (pagos) · T07, T08 (ingresos/gastos) |
+| 4. Registro y control de pagos, ingresos y gastos | T06 (pagos) · T07 (gastos) |
 | 5. Dashboard financiero e histórico mensual | T09 |
 | Transversal: almacenamiento de documentos | T11 |
 | Transversal: acceso protegido | T12 |
 | *(sin numeral en §5, exigida por §7.1 y por dos historias)* | T10 (UF) |
 
-Los 12 tickets cubren exactamente lo que `product.md` §5 exige. T10 no tiene numeral
+Los 11 tickets vigentes (T08 se canceló) cubren exactamente lo que `product.md` §5 exige. T10 no tiene numeral
 propio porque es infraestructura transversal a dos capacidades, no una capacidad de
 negocio en sí misma — igual que `architecture.md` la trata como un puerto.
 
@@ -889,7 +917,6 @@ T01 (propiedades)
  ├─→ T02 (crédito) ──→ T03 (registro mensual) ─────────────┐
  ├─→ T04 (contrato) ─→ T05 (reajustes/pago esperado) ─→ T06 (abonos/estado) ─┐
  ├─→ T07 (movimientos) ───────────────────────────────────┤                │
- └─→ T08 (aportes) ───────────────────────────────────────┤                │
                                                             ▼                ▼
                                                         T09 (dashboard) ←────┘
                           (T09 también depende de T10)
@@ -911,7 +938,7 @@ y no se resuelve aquí. Como referencia, sin comprometerla: T06 (backend, motor 
 puro con precedencia), T09 (full-stack; si se elige, solo su capa de presentación
 ilustraría el frontend) y T03 (esquema con más restricciones: dos `CHECK`, `UNIQUE`
 compuesto, separación `periodo`/`fecha_pago_dividendo`) son puntos de partida razonables.
-Los 12 tickets permanecen íntegros en este backlog sin importar qué se seleccione después.
+Los 11 tickets vigentes permanecen íntegros en este backlog sin importar qué se seleccione después.
 
 ## 8. Referencias
 

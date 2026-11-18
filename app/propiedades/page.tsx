@@ -19,6 +19,23 @@ async function ListadoPropiedades() {
 
   return (
     <>
+      {/* Mismo patrón que el enlace «← Inicio» del dashboard; sin layout compartido. */}
+      <Link href="/" className="mb-4 flex w-fit items-center gap-1 py-1 text-sm underline">
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+        >
+          <path d="M3 10.5 12 3l9 7.5" />
+          <path d="M5 9.5V21h5v-6h4v6h5V9.5" />
+        </svg>
+        Inicio
+      </Link>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Propiedades</h1>
         <Link href="/propiedades/nueva" className="rounded bg-black px-3 py-2 text-sm text-white">

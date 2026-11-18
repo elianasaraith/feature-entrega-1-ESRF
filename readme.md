@@ -16,12 +16,13 @@
 > hipotecarios y su registro mensual (T02, T03), contratos de arriendo (T04) y montos,
 > reajustes y pagos esperados (T05), abonos con estado de pago derivado (T06) y movimientos
 > financieros (T07; implementado y verificado: suite completa con 199 pruebas, 0 fallidas y 0 omitidas,
-> build correcto, migración aplicada y revisión manual de la interfaz) y el dashboard financiero
+> build correcto, migración aplicada y revisión manual de la interfaz; ampliado con un **desglose opcional
+> en conceptos**, ver abajo) y el dashboard financiero
 > (T09; implementado y verificado: suite completa con 218 pruebas, 0 fallidas y 0 omitidas,
 > build correcto y revisión manual; sin pruebas HTTP automatizadas de 200 y 404), con pruebas automatizadas y una interfaz para esas capacidades (el estado de
 > verificación está en `docs/work-tickets.md` §4.6 y §4.7). **El MVP no está terminado**:
-> siguen pendientes, entre otros, aportes de capital (T08), integración con la API de UF (T10) y documentos (T11), además del
-> despliegue. Lo que describen las secciones para esas capacidades es diseño propuesto; cada
+> siguen pendientes, entre otros, la integración con la API de UF (T10) y los documentos (T11), además del
+> despliegue. El ticket de aportes de capital (T08) se canceló por decisión de producto. Lo que describen las secciones para esas capacidades es diseño propuesto; cada
 > sección distingue lo implementado de lo propuesto. El detalle técnico completo vive en
 > `docs/`; este documento lo resume e integra, sin duplicarlo.
 
@@ -39,8 +40,8 @@ RealtyTrack
 
 Aplicación web personal para centralizar y consultar el estado financiero y
 contractual de una cartera de propiedades de inversión en Chile —propiedades,
-créditos hipotecarios, contratos de arriendo, pagos, egresos y aportes de
-capital—, evolucionando un proceso hoy basado en hojas de cálculo y
+créditos hipotecarios, contratos de arriendo, pagos y egresos—,
+evolucionando un proceso hoy basado en hojas de cálculo y
 consolidación manual.
 
 ### **0.4. URL del proyecto:**
@@ -98,10 +99,9 @@ Detalle completo: [docs/product.md](docs/product.md) §1–§3.
    histórico de montos y reajustes, sin perder la identidad del contrato.
 4. **Registro y control de pagos, ingresos y gastos** — pago esperado frente
    a abonos recibidos, con cuatro estados derivados (pendiente, parcialmente
-   pagado, pagado, vencido); egresos e inversiones por propiedad; aportes de
-   capital como concepto separado del gasto que financian.
+   pagado, pagado, vencido); egresos e inversiones por propiedad.
 5. **Dashboard financiero e histórico mensual** — ingresos, egresos, flujo
-   neto antes de aportes, aportes acumulados, saldo de créditos y estado de
+   neto, saldo de créditos y estado de
    las obligaciones de arriendo, a nivel de cartera y por propiedad, estable
    frente a variaciones posteriores de la UF.
 6. **Almacenamiento de documentos** (transversal) — cada documento asociado a
@@ -117,8 +117,9 @@ Detalle completo: [docs/product.md](docs/product.md) §5–§6.
 crédito hipotecario con su registro mensual, contratos y montos de arriendo
 (`app/propiedades/**`, `app/(auth)/login`). Un recorrido de la aplicación en
 funcionamiento está en el video [`realtytrack-entrega2.mp4`](realtytrack-entrega2.mp4);
-este documento no incluye capturas. Las vistas de abonos, movimientos, aportes, documentos y el dashboard siguen
-*pendientes*. El siguiente diagrama resume el **flujo de navegación previsto** (los
+este documento no incluye capturas. También están implementadas las vistas de abonos
+(pagos del contrato), de movimientos financieros —con registro simple o desglosado en
+conceptos— y del dashboard; la vista de documentos sigue *pendiente*. El siguiente diagrama resume el **flujo de navegación previsto** (los
 nodos `app/dashboard` y `app/contratos` son diseño; en la aplicación actual los
 contratos viven bajo `app/propiedades/[id]/contratos`), construido a partir de las
 vistas definidas en
@@ -128,7 +129,7 @@ vistas definidas en
 ```mermaid
 flowchart TD
     Login["Pantalla de acceso<br/>(auth)/login"] --> Cartera["Cartera<br/>app/propiedades"]
-    Cartera --> Detalle["Detalle de propiedad<br/>crédito · contrato · pagos · egresos · aportes · documentos"]
+    Cartera --> Detalle["Detalle de propiedad<br/>crédito · contrato · pagos · egresos · documentos"]
     Cartera --> Dashboard["Dashboard mensual<br/>app/dashboard"]
     Detalle --> Registro["Registro mensual del crédito<br/>app/propiedades/[id]/credito/registro-mensual"]
     Detalle --> Contrato["Contratos, reajustes, pagos y abonos<br/>app/contratos"]
@@ -136,8 +137,7 @@ flowchart TD
 ```
 
 Las vistas de consulta se complementarán con los formularios de registro
-previstos (alta de propiedad, crédito, contrato, reajuste, abono, movimiento,
-aporte). Ningún cálculo financiero pertenece a la UI: los importes llegan ya
+previstos (alta de propiedad, crédito, contrato, reajuste, abono y movimiento). Ningún cálculo financiero pertenece a la UI: los importes llegan ya
 derivados desde la capa de servicios (`docs/architecture.md` §7).
 
 ### **1.4. Instrucciones de instalación:**
@@ -229,10 +229,25 @@ movimientos financieros como egresos manuales (T07: migración
 `20261109120000_add_movimiento_financiero` aplicada, suite completa con 199 pruebas sin
 fallos ni omisiones, build correcto y revisión manual de la interfaz) y dashboard
 financiero (T09: `/dashboard` y resumen mensual en el detalle de la propiedad; implementado,
-suite completa de 218 pruebas sin fallos ni omisiones, build y revisión manual correctos; sin aportes ni
-equivalente en CLP de la UF, que dependen de T08 y T10).
-**Pendiente del MVP:** aportes de capital (T08), valor de la UF (T10), documentos (T11) y
-despliegue.
+suite completa de 218 pruebas sin fallos ni omisiones, build y revisión manual correctos; sin
+equivalente en CLP de la UF, que depende de T10).
+**Ampliación de T07 — gasto simple o desglosado:** un movimiento puede registrarse como un
+único monto o desglosado en 1 a 50 conceptos, cada uno con nombre y monto en CLP. La suma de
+los conceptos es el total del movimiento, calculado en el servidor y guardado en
+`movimiento_financiero.monto_clp`; los conceptos son una entidad hija
+(`movimiento_concepto`, migración `20261116120000_add_movimiento_concepto`) y no
+movimientos independientes. El dashboard (T09) lee solo el monto del movimiento, por lo que un
+gasto desglosado se cuenta una sola vez, sin cambios en sus fórmulas. Editar un gasto
+desglosado sin enviar sus conceptos los conserva; solo `conceptos: []` lo convierte en simple.
+Los movimientos anteriores siguen siendo gastos simples, sin migración de datos. Verificado por
+el usuario con PostgreSQL local: pruebas unitarias, de integración (servicio, API y T09)
+y `npm run build` correctos, y la consulta de integridad sin filas inconsistentes en
+`realtytrack_test`. Revisión visual **parcial**: se confirmó la conversión de un gasto simple en
+uno desglosado con tres conceptos y total de 150.000 CLP; los demás flujos de la interfaz
+siguen pendientes de revisión manual.
+**Cancelado:** aportes de capital (T08), por decisión de producto; el gasto se registra una
+sola vez, como egreso.
+**Pendiente del MVP:** valor de la UF (T10), documentos (T11) y despliegue.
 
 ---
 
@@ -556,14 +571,12 @@ erDiagram
         timestamptz updated_at "NOT NULL"
     }
 
-    APORTE_CAPITAL {
+    MOVIMIENTO_CONCEPTO {
         uuid id PK
-        uuid propiedad_id FK "NOT NULL"
-        uuid movimiento_financiero_id FK "NULL"
-        date fecha "NOT NULL - fecha de caja"
-        numeric monto_clp "NOT NULL - 14,0"
-        motivo_aporte motivo "NOT NULL"
-        text descripcion "NULL"
+        uuid movimiento_financiero_id FK "NOT NULL - ON DELETE CASCADE"
+        text nombre "NOT NULL"
+        numeric monto_clp "NOT NULL - 14,0 - CHECK > 0"
+        int orden "NOT NULL"
         timestamptz created_at "NOT NULL"
         timestamptz updated_at "NOT NULL"
     }
@@ -599,8 +612,7 @@ erDiagram
     CONTRATO_ARRIENDO ||--o{ PAGO_ESPERADO : "genera"
     PAGO_ESPERADO ||--o{ ABONO_ARRIENDO : "se cubre con"
     PROPIEDAD ||--o{ MOVIMIENTO_FINANCIERO : "incurre en"
-    PROPIEDAD ||--o{ APORTE_CAPITAL : "recibe"
-    MOVIMIENTO_FINANCIERO ||--o{ APORTE_CAPITAL : "es financiado por"
+    MOVIMIENTO_FINANCIERO ||--o{ MOVIMIENTO_CONCEPTO : "se desglosa en"
     PROPIEDAD ||--o{ DOCUMENTO : "agrupa"
     CREDITO_HIPOTECARIO ||--o{ DOCUMENTO : "respaldado por"
     CONTRATO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
@@ -609,8 +621,9 @@ erDiagram
 ```
 
 *(Modelo lógico del MVP: están en el esquema Prisma las entidades de propiedad, crédito y
-registro mensual, usuario, arrendatario, contrato, `contrato_monto` y `pago_esperado`; el
-resto (abonos, movimientos, aportes, documentos, UF) es diseño propuesto. Fuente versionable:
+registro mensual, usuario, arrendatario, contrato, `contrato_monto`, `pago_esperado`,
+`abono_arriendo`, `movimiento_financiero` y `movimiento_concepto`; el resto (documentos, UF) es
+diseño propuesto. Fuente versionable:
 [docs/diagrams/data-model.mmd](docs/diagrams/data-model.mmd).)*
 
 `USUARIO` y `VALOR_UF_PERIODO` no tienen relaciones: el primero solo guarda
@@ -630,8 +643,8 @@ consultada por período.
 | `contrato_monto` | Histórico de los montos aplicados a lo largo de un contrato | PK `id`; FK `contrato_id` | `UNIQUE(contrato_id, vigente_desde_periodo)`; el monto inicial es su primera fila, no una columna del contrato (el monto inicial es opcional en el alta: sin él el contrato no tiene fila y no genera pagos esperados hasta registrar el primer monto, T05; propuesta a validar). Los reajustes agregan filas y nunca modifican las anteriores |
 | `pago_esperado` | Lo que se espera cobrar por arriendo en un período mensual | PK `id`; FK `contrato_id` | `UNIQUE(contrato_id, periodo)`; `CHECK` monto > 0 y período día 1; snapshot del monto vigente en ese mes. Lo crea una sincronización explícita e idempotente (T05) y un reajuste solo actualiza `monto_esperado_clp` desde su período |
 | `abono_arriendo` | Cada entrega de dinero recibida contra un pago esperado | PK `id`; FK `pago_esperado_id` | Sin tope: los abonos pueden exceder el monto esperado sin rechazar el registro |
-| `movimiento_financiero` | Egresos e inversiones de una propiedad | PK `id`; FK `propiedad_id` | `ENUM categoria_movimiento` sin valor `DIVIDENDO`, para no duplicar esa salida de dinero |
-| `aporte_capital` | Capital propio que el propietario incorpora a una propiedad | PK `id`; FK `propiedad_id`; FK opcional `movimiento_financiero_id` | Nunca entra en el flujo neto antes de aportes |
+| `movimiento_financiero` | Egresos e inversiones de una propiedad | PK `id`; FK `propiedad_id` | `ENUM categoria_movimiento` sin valor `DIVIDENDO`, para no duplicar esa salida de dinero. `monto_clp` es siempre el total del gasto: si está desglosado, es la suma de sus conceptos y las agregaciones no los suman de nuevo |
+| `movimiento_concepto` | Concepto (nombre y monto) de un gasto desglosado; parte del movimiento, no un movimiento aparte | PK `id`; FK `movimiento_financiero_id` | `ON DELETE CASCADE`; `CHECK` monto > 0; sin conceptos = gasto simple (los movimientos existentes no se migran) |
 | `valor_uf_periodo` | Valor de la UF asociado a cada período mensual | PK `periodo` | No se sobrescribe por una consulta posterior a la API, una vez almacenado |
 | `documento` | Metadata de los archivos; el binario vive en object storage | PK `id`; FK `propiedad_id` obligatoria + 4 FK específicas opcionales | `CHECK`: a lo sumo una de las cuatro FK opcionales es no nula |
 
@@ -862,9 +875,7 @@ Respuesta `200`:
   "periodo": "2026-03",
   "ingresos_clp": "500000",
   "egresos_clp": "650000",
-  "flujo_neto_antes_de_aportes_clp": "-150000",
-  "aportes_mes_clp": "150000",
-  "aportes_acumulados_clp": "4500000",
+  "flujo_neto_clp": "-150000",
   "saldo_creditos_uf": "812.4"
 }
 ```
@@ -926,29 +937,30 @@ Detalle íntegro (13 escenarios, 5 casos límite):
 **Historia de Usuario 3 — HU03: Gestionar y consultar el flujo financiero mensual**
 
 Como propietario-inversor que autogestiona su cartera, quiero consultar el
-flujo financiero de un mes con los ingresos, los egresos y los aportes de
-capital claramente separados, para saber cuál fue el resultado real del
-período y cuánto capital propio he puesto, sin consolidar información a
-mano.
+flujo financiero de un mes con los ingresos y los egresos claramente
+separados, para saber cuál fue el resultado real del período sin
+consolidar información a mano.
 
 Criterios de aceptación representativos:
 
-- El flujo neto antes de aportes es el resultado del período: ingresos menos
-  egresos; el aporte de capital se informa aparte y no lo neutraliza
-  (Escenarios 3–4).
+- El flujo neto es el resultado del período: ingresos menos egresos
+  (Escenario 3).
 - Un mes histórico produce las mismas cifras en dos consultas sucesivas,
   aunque el valor de la UF cambie entre ambas (Escenario 9).
 - El dashboard agrega la cartera y permite abrir cada propiedad por separado,
   sin ranking ni comparación entre propiedades (Caso límite 14).
+- Un gasto puede registrarse desglosado en conceptos (por ejemplo, 60.000 + 70.000 +
+  20.000 = 150.000 CLP) y el dashboard lo cuenta una sola vez; editarlo sin enviar
+  sus conceptos no los pierde (Escenarios 15 y 16, Caso límite 17).
 
-Detalle íntegro (11 escenarios, 3 casos límite):
-[docs/user-stories.md](docs/user-stories.md) — HU03.
+Detalle íntegro (10 escenarios vigentes —los escenarios 4 a 6 se retiraron con T08—
+y 4 casos límite): [docs/user-stories.md](docs/user-stories.md) — HU03.
 
 ---
 
 ## 6. Tickets de Trabajo
 
-El backlog técnico completo (T01–T12,
+El backlog técnico completo (T01–T12, con T08 cancelado,
 [docs/work-tickets.md](docs/work-tickets.md)) se organiza **principalmente en
 rebanadas verticales**, con tickets backend y capacidades transversales
 cuando corresponde. Esta plantilla exige, en cambio, un ejemplo por capa
@@ -1011,7 +1023,7 @@ servicio de agregación mensual que esta interfaz consume sigue siendo
 propiedad de T09.
 
 **Objetivo de esta capa.** Presentar el flujo financiero mensual —ingresos,
-egresos, flujo neto antes de aportes, aportes del mes y acumulados, saldo de
+egresos y flujo neto, saldo de
 los créditos y estado de las obligaciones de arriendo del período
 consultado— en la vista de cartera y en la vista por propiedad, consumiendo
 los datos que ya entrega el servicio de agregación de T09. No calcula nada:

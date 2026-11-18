@@ -42,7 +42,6 @@ directa:
 - cuánto debía ingresar por arriendos durante un mes, y cuánto ingresó realmente;
 - qué pagos están pendientes, parciales o vencidos;
 - cuánto se pagó en dividendos y en otros gastos;
-- cuánto capital propio se ha aportado;
 - cuál fue el resultado financiero neto de un mes;
 - cuál es el saldo de los créditos hipotecarios;
 - qué ocurrió financieramente en un mes anterior;
@@ -76,14 +75,12 @@ entre lo que se esperaba y lo que ocurrió.
 ## 4. Propuesta de valor
 
 - **Registro unificado por propiedad.** Propiedad, crédito, contrato, pagos, egresos,
-  aportes y documentos en un solo lugar, sin dejar de tratarse cada propiedad de forma
+  y documentos en un solo lugar, sin dejar de tratarse cada propiedad de forma
   individual.
 - **Esperado frente a recibido.** El sistema conoce lo que debía ocurrir en cada período
   mensual, así que puede señalar por sí mismo lo pendiente, lo parcial y lo vencido.
 - **Histórico consultable y estable.** Un período mensual anterior se consulta como el
   actual, y sus cifras no se mueven por una variación posterior del valor de la UF.
-- **Desempeño y financiamiento separados.** El resultado del mes no queda enmascarado por
-  el capital propio que se inyectó para cubrirlo.
 - **Documentación localizable.** Cada documento queda asociado a la propiedad y al hecho
   que respalda.
 - **Diseñado para N propiedades.** Añadir una propiedad es usar el sistema, no
@@ -101,7 +98,7 @@ Cinco capacidades must-have. Cada una se delimita por lo que deja fuera:
    de pago y los montos aplicados durante la vigencia. No incluye generar ni firmar
    contratos.
 4. **Registro y control de pagos, ingresos y gastos** — pagos esperados y abonos
-   recibidos, egresos por propiedad y aportes de capital. No incluye cobrar, pagar ni
+   recibidos, egresos por propiedad. No incluye cobrar, pagar ni
    conciliar con el banco.
 5. **Dashboard financiero e histórico mensual** — la situación de un período mensual y la
    consulta de meses anteriores, a nivel de cartera y de cada propiedad. No incluye
@@ -185,25 +182,30 @@ control recurrente del propietario. Si la propiedad está sin arrendatario y el 
 debe pagarlos, pueden registrarse como un egreso de la propiedad. Esto no convierte los
 gastos comunes en una funcionalidad administrada por el producto.
 
-**Aportes de capital.** Registrar el capital propio que el propietario incorpora a una
-propiedad: el pie inicial, capital adicional o la cobertura de un déficit del mes. Su
-propósito es poder responder cuánto capital propio se ha puesto en la inversión, de forma
-acumulada.
+**Aportes de capital: cancelado por decisión de producto.** Se evaluó registrar el capital
+propio que el propietario incorpora a una propiedad (ticket T08) y se descartó: el MVP no
+lleva un registro independiente de aportes ni una cifra de capital aportado. El gasto de
+una propiedad se registra una sola vez, como egreso, en los movimientos financieros.
 
-Aporte y uso de fondos son conceptos distintos y se registran por separado:
+**Gasto simple o desglosado.** Un movimiento financiero se registra como un **gasto
+simple** —un único monto— o como un **gasto desglosado** en uno o varios conceptos, cada
+uno con su nombre y su monto en CLP (hasta 50 conceptos; los nombres pueden repetirse). Los
+conceptos son parte del movimiento, no movimientos independientes: la suma de los conceptos
+determina el total del movimiento, y ese total entra **una sola vez** en los egresos del
+mes y en el flujo neto. El desglose es opcional y no cambia el gasto simple, que se
+comporta como siempre.
 
-- un **egreso o inversión** es uso de recursos de la propiedad — cuánto se gastó o se
-  invirtió;
-- un **aporte de capital** es dinero propio que entra — cómo se financió.
+```
+Reparación:
+  Materiales:     60.000 CLP
+  Mano de obra:   70.000 CLP
+  Transporte:     20.000 CLP
+Total:           150.000 CLP   → se cuenta una vez en los egresos del mes
+```
 
-Una inversión capitalizable no es un aporte por sí misma. Si el propietario remodela un
-departamento con dinero propio, coexisten dos registros: el egreso o inversión por la
-remodelación, y el aporte de capital que explica su financiamiento. Mantenerlos separados
-es lo que permite conocer por separado cuánto se ha invertido y cuánto capital propio se
-ha aportado.
-
-Por eso el aporte **no se cuenta como egreso del mes**: tratarlo como tal duplicaría la
-misma salida de dinero y borraría el resultado real del período.
+Un gasto puede pasar de simple a desglosado y viceversa. Editar un gasto desglosado sin
+mencionar sus conceptos **los conserva**; el desglose solo se elimina de forma explícita, al
+convertir el gasto en simple indicando su monto.
 
 ### 6.5 Dashboard e histórico mensual
 
@@ -216,39 +218,31 @@ propiedades:
 - egresos;
 - dividendos efectivamente pagados;
 - otros gastos;
-- **flujo neto antes de aportes**;
-- aportes de capital del mes y acumulados;
+- **flujo neto**;
 - saldo de los créditos hipotecarios;
 - estado de los pagos de arriendo.
 
 **Vista por propiedad.** El detalle financiero y contractual de una propiedad concreta:
-su crédito, su contrato vigente, sus pagos esperados y recibidos, sus egresos y sus
-aportes.
+su crédito, su contrato vigente, sus pagos esperados y recibidos y sus egresos.
 
 Agregar la cartera y consultar una propiedad individualmente **no es comparar
 propiedades**. El producto no ordena, puntúa ni enfrenta propiedades entre sí.
 
-#### Flujo neto antes de aportes
+#### Flujo neto
 
-El **flujo neto antes de aportes** es el resultado del período mensual: los ingresos
-asociados a la operación menos los egresos asociados a la inversión. Los aportes de
-capital se informan como una cifra separada.
+El **flujo neto** es el resultado del período mensual: los ingresos asociados a la
+operación menos los egresos asociados a la inversión. Puede ser negativo.
 
 ```
-Ingresos:                        +500.000 CLP
-Egresos:                         -650.000 CLP
-Flujo neto antes de aportes:     -150.000 CLP
-Aporte del propietario:          +150.000 CLP
+Ingresos:     +500.000 CLP
+Egresos:      -650.000 CLP
+Flujo neto:   -150.000 CLP
 ```
-
-El aporte explica **cómo se financió** el déficit; no convierte el desempeño del mes en
-cero. Puede mostrarse además la posición resultante después de aportes, siempre que el
-flujo neto antes de aportes siga visible: es la cifra que informa sobre el desempeño.
 
 #### Moneda
 
 Las métricas consolidadas del flujo financiero se expresan en **CLP**: ingresos,
-dividendos efectivamente pagados, gastos, aportes y flujo neto antes de aportes.
+dividendos efectivamente pagados, gastos y flujo neto.
 
 Los datos contractuales del crédito mantienen su **unidad natural en UF**, en particular la
 cuota contractual y el saldo pendiente. Cuando sea útil puede mostrarse además su
@@ -307,14 +301,9 @@ invitaciones ni perfiles.
 - El estado de un pago se determina a partir del monto esperado, los abonos recibidos y la
   fecha esperada de pago: pendiente, parcialmente pagado, pagado o vencido.
 - La garantía es información contractual, no un ingreso recurrente del flujo mensual.
-- Un **egreso o inversión** es uso de recursos de la propiedad. Un **aporte de capital** es
-  dinero propio incorporado por el propietario. Son conceptos distintos: una inversión
-  capitalizable no es un aporte por sí misma, y financiar una inversión con dinero propio
-  genera ambos registros.
-- El aporte de capital no se cuenta como egreso del mes.
-- El **flujo neto antes de aportes** es el resultado del período mensual: ingresos de la
-  operación menos egresos de la inversión. Los aportes se informan aparte y no lo
-  neutralizan.
+- Un **egreso o inversión** es uso de recursos de la propiedad y se registra una sola vez.
+- El **flujo neto** es el resultado del período mensual: ingresos de la operación menos
+  egresos de la inversión.
 - Los gastos comunes ordinarios corresponden al arrendatario. Si la propiedad está
   desocupada y los paga el propietario, se registran como egreso de la propiedad.
 - El histórico financiero se consulta **por período mensual**.
@@ -343,7 +332,6 @@ diseño, y se aborda en docs/user-stories.md y docs/data-model.md:
 - cómo se representan los abonos frente al pago esperado;
 - cómo se conserva la serie mensual de dividendo pagado y saldo pendiente;
 - cómo se asocia el valor de UF a cada período mensual;
-- cómo se vinculan un egreso y el aporte de capital que lo financia;
 - qué categorías de movimiento financiero se fijan y cuáles quedan abiertas.
 
 ## 8. Fuera de alcance del MVP
@@ -369,6 +357,8 @@ No forman parte del producto y no deben documentarse como si existieran:
 - **Importador de Excel** — la carga inicial es un proceso controlado, no una
   funcionalidad.
 - **Cierre mensual** — no existe cierre, reapertura ni bloqueo de períodos.
+- **Aportes de capital independientes** — cancelados por decisión de producto (T08); no hay
+  registro de capital aportado ni cifra de aportes en el dashboard.
 
 ## 9. Evolución posterior (no comprometida)
 
@@ -397,11 +387,10 @@ Verificables funcionalmente, sin métricas estimadas:
    esperado, los abonos recibidos y la fecha esperada de pago.
 4. Consultar dos veces un mes anterior, sin modificar sus datos, y obtener las mismas
    cifras — incluso si el valor de la UF cambió entre ambas consultas.
-5. Obtener el flujo neto antes de aportes de un mes sin sumar importes a mano.
-6. Para un mes con déficit, distinguir el resultado de la operación del capital propio
-   aportado para cubrirlo.
-7. Para una inversión financiada con dinero propio, ver por separado el monto invertido y
-   el aporte de capital que lo financió.
+5. Obtener el flujo neto de un mes sin sumar importes a mano.
+6. Registrar un gasto simple o un gasto desglosado en varios conceptos con montos
+   individuales, cuya suma determina el total del movimiento.
+7. Comprobar que un gasto desglosado se cuenta una sola vez en los egresos del mes.
 8. Consultar el saldo de un crédito en un mes anterior, no solo el vigente.
 9. Localizar cualquier documento cargado partiendo de la propiedad a la que pertenece.
 10. Inicializar el sistema con datos históricos anonimizados anonimizados de las tres propiedades reales y comprobar que las cifras mensuales coinciden con las de la fuente original.

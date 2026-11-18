@@ -2,7 +2,7 @@
 %%
 %% Fuente versionable del diagrama de docs/data-model.md §3 "Diagrama del modelo de datos".
 %% Debe mantenerse consistente con ese documento: si ambos difieren, manda el documento.
-%% Las trece entidades, sus atributos y las quince relaciones son las que definen
+%% Las trece entidades, sus atributos y las catorce relaciones son las que definen
 %% docs/data-model.md §4 (entidades) y §5 (relaciones y cardinalidades).
 %%
 %% Convenciones: la precisión de los NUMERIC va en el comentario de cada atributo
@@ -123,14 +123,12 @@ erDiagram
         timestamptz updated_at "NOT NULL"
     }
 
-    APORTE_CAPITAL {
+    MOVIMIENTO_CONCEPTO {
         uuid id PK
-        uuid propiedad_id FK "NOT NULL"
-        uuid movimiento_financiero_id FK "NULL"
-        date fecha "NOT NULL - fecha de caja"
-        numeric monto_clp "NOT NULL - 14,0"
-        motivo_aporte motivo "NOT NULL"
-        text descripcion "NULL"
+        uuid movimiento_financiero_id FK "NOT NULL - ON DELETE CASCADE"
+        text nombre "NOT NULL"
+        numeric monto_clp "NOT NULL - 14,0 - CHECK > 0"
+        int orden "NOT NULL"
         timestamptz created_at "NOT NULL"
         timestamptz updated_at "NOT NULL"
     }
@@ -166,8 +164,7 @@ erDiagram
     CONTRATO_ARRIENDO ||--o{ PAGO_ESPERADO : "genera"
     PAGO_ESPERADO ||--o{ ABONO_ARRIENDO : "se cubre con"
     PROPIEDAD ||--o{ MOVIMIENTO_FINANCIERO : "incurre en"
-    PROPIEDAD ||--o{ APORTE_CAPITAL : "recibe"
-    MOVIMIENTO_FINANCIERO ||--o{ APORTE_CAPITAL : "es financiado por"
+    MOVIMIENTO_FINANCIERO ||--o{ MOVIMIENTO_CONCEPTO : "se desglosa en"
     PROPIEDAD ||--o{ DOCUMENTO : "agrupa"
     CREDITO_HIPOTECARIO ||--o{ DOCUMENTO : "respaldado por"
     CONTRATO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"

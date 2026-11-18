@@ -21,7 +21,7 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 | Herramienta | Uso en RealtyTrack |
 |---|---|
 | Claude Code (extensión de VS Code) | Asistente de código en todas las fases: documentación de la Entrega 1 y desarrollo de T01–T07, T09 y T12, más la ampliación de T07 con desglose de conceptos; T08 se exploró, se implementó localmente y se canceló |
-| OpenSpec | Flujo Spec-Driven Development: `openspec/specs/` (9 capacidades) y `openspec/changes/archive/` (11 cambios archivados: fundación, autenticación, propiedades, créditos, registro mensual, contratos, reajustes, abonos de arriendo, movimientos financieros, dashboard financiero y la retirada de T08 del dashboard). Al 2026-11-15, el cambio `t07-desglose-movimientos` está activo, verificado y sin archivar |
+| OpenSpec | Flujo Spec-Driven Development: `openspec/specs/` (9 capacidades) y `openspec/changes/archive/` (12 cambios archivados: fundación, autenticación, propiedades, créditos, registro mensual, contratos, reajustes, abonos de arriendo, movimientos financieros, dashboard financiero, la retirada de T08 del dashboard y el desglose de conceptos de T07). El cambio `t07-desglose-movimientos` quedó verificado y archivado como `2026-11-18-t07-desglose-movimientos` |
 | Comandos y skills del repositorio | `.claude/commands/opsx/` (explore, propose, apply, verify, archive…) y `.claude/skills/` (skills `openspec-*`) |
 
 **Modelos.** Claude, a través de Claude Code. En la sesión de T05 y en la sesión que cubre T08 y la ampliación de T07 (desglose) el modelo

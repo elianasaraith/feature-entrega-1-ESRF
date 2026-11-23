@@ -2,8 +2,15 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NotFoundError } from "@/server/errors";
-import { creditoRegistroService, creditoService, propiedadService } from "@/server/services";
-import type { CreditoDto } from "@/server/services/credito-service";
+import { creditoService, propiedadService } from "@/server/services";
+import type { CreditoConEquivalentesDto } from "@/server/services/credito-service";
+import {
+  etiquetaMes,
+  formatearMontoClp,
+  formatearValorUf,
+  referenciasUf,
+} from "@/server/uf/equivalente";
+import type { EquivalenteClpDto } from "@/server/uf/equivalente";
 
 export default function CreditoPage({ params }: { params: Promise<{ id: string }> }) {
   return (
@@ -15,8 +22,20 @@ export default function CreditoPage({ params }: { params: Promise<{ id: string }
   );
 }
 
-// El equivalente en CLP depende de valor_uf_periodo (T10, pendiente).
 const CLP_NO_DISPONIBLE = "No disponible";
+
+// El equivalente ya viene calculado por el servidor; aquí solo se presenta. La UF
+// utilizada se muestra una sola vez en «Valores de UF utilizados»; junto al monto
+// solo se indica el mes cuando hay más de una referencia que distinguir.
+function textoClp(
+  equivalente: EquivalenteClpDto,
+  variasReferencias: boolean,
+  sinReferencia?: string
+): string {
+  if (!equivalente) return `CLP: ${sinReferencia ?? CLP_NO_DISPONIBLE}`;
+  const mes = variasReferencias ? ` · ${etiquetaMes(equivalente.fechaReferencia, true)}` : "";
+  return `CLP: ${formatearMontoClp(equivalente)}${mes}`;
+}
 
 async function DetalleCredito({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -25,9 +44,9 @@ async function DetalleCredito({ params }: { params: Promise<{ id: string }> }) {
     throw error;
   });
 
-  let credito: CreditoDto | null = null;
+  let credito: CreditoConEquivalentesDto | null = null;
   try {
-    credito = await creditoService.obtenerPorPropiedad(id);
+    credito = await creditoService.obtenerConEquivalentes(id);
   } catch (error) {
     if (!(error instanceof NotFoundError)) throw error;
   }
@@ -55,21 +74,32 @@ async function DetalleCredito({ params }: { params: Promise<{ id: string }> }) {
   }
 
   // Registro de período máximo con saldo; no es un saldo calculado ni «actual».
-  const ultimoSaldo = await creditoRegistroService.ultimoSaldoRegistrado(id);
+  const ultimoSaldo = credito.ultimoSaldo;
+
+  const referencias = referenciasUf([
+    credito.cuotaContractualClp,
+    credito.saldoInicialClp,
+    ultimoSaldo?.equivalenteClp ?? null,
+  ]);
+  const varias = referencias.length > 1;
 
   const filas: [string, string][] = [
     ["Banco", credito.banco],
-    ["Cuota contractual", `${credito.cuotaContractualUf} UF · CLP: ${CLP_NO_DISPONIBLE}`],
+    ["Cuota contractual", `${credito.cuotaContractualUf} UF · ${textoClp(credito.cuotaContractualClp, varias)}`],
     [
       "Saldo inicial",
       credito.saldoInicialUf
-        ? `${credito.saldoInicialUf} UF · CLP: ${CLP_NO_DISPONIBLE}`
+        ? `${credito.saldoInicialUf} UF · ${textoClp(
+            credito.saldoInicialClp,
+            varias,
+            credito.fechaOtorgamiento === null ? "Sin fecha de otorgamiento" : undefined
+          )}`
         : "—",
     ],
     [
       "Último saldo registrado",
       ultimoSaldo
-        ? `${ultimoSaldo.saldoPendienteUf} UF (período ${ultimoSaldo.periodo}) · CLP: ${CLP_NO_DISPONIBLE}`
+        ? `${ultimoSaldo.saldoPendienteUf} UF (período ${ultimoSaldo.periodo}) · ${textoClp(ultimoSaldo.equivalenteClp, varias)}`
         : "No registrado",
     ],
     ["Tasa de interés anual", `${credito.tasaInteresAnual} %`],
@@ -93,6 +123,19 @@ async function DetalleCredito({ params }: { params: Promise<{ id: string }> }) {
           Editar
         </Link>
       </div>
+      {referencias.length > 0 && (
+        <section aria-label="Valores de UF utilizados" className="mb-4 text-xs text-black/60">
+          <h2 className="mb-1 font-medium">Valores de UF utilizados</h2>
+          <ul className="flex flex-col gap-0.5 sm:flex-row sm:flex-wrap sm:gap-x-4">
+            {referencias.map((ref) => (
+              <li key={ref.fechaReferencia}>
+                <span className="capitalize">{etiquetaMes(ref.fechaReferencia)}</span>:{" "}
+                {formatearValorUf(ref)} · referencia {ref.fechaReferencia}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
         {filas.map(([etiqueta, valor]) => (
           <div key={etiqueta} className="contents">

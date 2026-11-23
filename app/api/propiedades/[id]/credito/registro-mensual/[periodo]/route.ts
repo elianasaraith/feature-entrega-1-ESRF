@@ -15,7 +15,10 @@ export async function GET(_request: Request, { params }: Context) {
   try {
     const { id, periodo } = await params;
     return Response.json(
-      await creditoRegistroService.obtenerPorPeriodo(id, periodoSchema.parse(periodo))
+      await creditoRegistroService.obtenerPorPeriodoConEquivalentes(
+        id,
+        periodoSchema.parse(periodo)
+      )
     );
   } catch (error) {
     return toHttpResponse(error);

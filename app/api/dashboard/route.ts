@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const hoy = hoyChile();
     const crudo = new URL(request.url).searchParams.get("mes");
     const mes = crudo === null ? hoy.slice(0, 7) : yearMonth.parse(crudo);
-    return Response.json(await dashboardService.resumenMensual(mes, hoy));
+    return Response.json(await dashboardService.resumenMensualConEquivalentes(mes, hoy));
   } catch (error) {
     return toHttpResponse(error);
   }

@@ -9,12 +9,16 @@ import {
   seleccionarSaldoAplicable,
   sumarMontos,
 } from "@/server/domain/dashboard";
+import { calcularEquivalenteClp } from "@/server/uf/equivalente";
+import type { EquivalenteClpDto } from "@/server/uf/equivalente";
+import type { UfService, ValorUfDto } from "@/server/uf/uf-service";
 import { asegurarPropiedad } from "./propiedad-lookup";
 
 // Totales de caja del mes (docs/data-model.md §7.1): ingresos por
 // fecha_recepcion, dividendos por fecha_pago_dividendo y otros egresos por
 // fecha. El período contractual o hipotecario nunca interviene. Los
-// equivalentes en CLP de la UF (T10) quedan fuera.
+// equivalentes en CLP de la UF (T10) son informativos y viven aparte: nunca
+// participan en estos totales.
 export type TotalesDto = {
   ingresosClp: string;
   dividendosClp: string;
@@ -37,6 +41,19 @@ export type PagoMesDto = {
 };
 
 export type SaldoCreditoDto = { periodo: string; saldoPendienteUf: string };
+
+// T10: variantes con el equivalente en CLP del saldo. Solo añaden el campo
+// `equivalenteClp` (UF del MES CONSULTADO; el período del saldo se conserva);
+// los DTO anteriores no cambian.
+export type SaldoCreditoConEquivalenteDto = SaldoCreditoDto & { equivalenteClp: EquivalenteClpDto };
+type ConSaldoEquivalente<T extends { saldoCredito: SaldoCreditoDto | null }> = Omit<T, "saldoCredito"> & {
+  saldoCredito: SaldoCreditoConEquivalenteDto | null;
+};
+export type PropiedadResumenConEquivalenteDto = ConSaldoEquivalente<PropiedadResumenDto>;
+export type ResumenMensualConEquivalentesDto = Omit<ResumenMensualDto, "propiedades"> & {
+  propiedades: PropiedadResumenConEquivalenteDto[];
+};
+export type ResumenPropiedadConEquivalenteDto = ConSaldoEquivalente<ResumenPropiedadDto>;
 
 export type ActividadDto = ActividadEntrada & { propiedadId: string; href: string };
 
@@ -89,7 +106,30 @@ function totales(ingresos: string[], dividendos: string[], otros: string[]): Tot
 // Un solo servicio para cartera y propiedad (architecture.md §10.4). Solo
 // lectura: no escribe ni persiste ningún derivado. Las filas del mes se
 // consultan una vez por tabla (sin N+1) y se agrupan por propiedad con bigint.
-export function createDashboardService(prisma: PrismaClient) {
+// `uf` es opcional y solo lo usan los métodos *ConEquivalentes: los demás nunca
+// consultan la UF ni al proveedor.
+export function createDashboardService(prisma: PrismaClient, uf?: UfService) {
+  // La UF del mes consultado: un único período por solicitud, y solo si algún
+  // saldo la necesita. Cualquier fallo deja el equivalente en null.
+  async function ufDelMes(mes: string, hayAlgunSaldo: boolean): Promise<ValorUfDto | undefined> {
+    if (!uf || !hayAlgunSaldo) return undefined;
+    try {
+      return (await uf.obtenerValores([mes])).get(mes);
+    } catch (error) {
+      console.error("No se pudo resolver la UF para el equivalente del dashboard", error);
+      return undefined;
+    }
+  }
+
+  function conEquivalente(
+    saldo: SaldoCreditoDto | null,
+    valorUf: ValorUfDto | undefined
+  ): SaldoCreditoConEquivalenteDto | null {
+    return saldo
+      ? { ...saldo, equivalenteClp: calcularEquivalenteClp(saldo.saldoPendienteUf, valorUf) }
+      : null;
+  }
+
   async function calcular(mes: string, hoy: string, propiedadId?: string) {
     const { desde, hasta } = rangoDelMes(mes);
     const rango = { gte: aFecha(desde), lt: aFecha(hasta) };
@@ -251,6 +291,26 @@ export function createDashboardService(prisma: PrismaClient) {
         ),
         propiedades: filas,
       };
+    },
+
+    // Mismos cálculos que resumenMensual (se reutiliza tal cual) + equivalente del saldo.
+    async resumenMensualConEquivalentes(mes: string, hoy: string): Promise<ResumenMensualConEquivalentesDto> {
+      const base = await this.resumenMensual(mes, hoy);
+      const valorUf = await ufDelMes(mes, base.propiedades.some((p) => p.saldoCredito !== null));
+      return {
+        ...base,
+        propiedades: base.propiedades.map((p) => ({ ...p, saldoCredito: conEquivalente(p.saldoCredito, valorUf) })),
+      };
+    },
+
+    async resumenPropiedadConEquivalentes(
+      propiedadId: string,
+      mes: string,
+      hoy: string
+    ): Promise<ResumenPropiedadConEquivalenteDto> {
+      const base = await this.resumenPropiedad(propiedadId, mes, hoy);
+      const valorUf = await ufDelMes(mes, base.saldoCredito !== null);
+      return { ...base, saldoCredito: conEquivalente(base.saldoCredito, valorUf) };
     },
 
     async resumenPropiedad(propiedadId: string, mes: string, hoy: string): Promise<ResumenPropiedadDto> {

@@ -10,7 +10,7 @@ export async function GET(_request: Request, { params }: Context) {
   if (session instanceof Response) return session;
   try {
     const { id } = await params;
-    return Response.json(await creditoService.obtenerPorPropiedad(id));
+    return Response.json(await creditoService.obtenerConEquivalentes(id));
   } catch (error) {
     return toHttpResponse(error);
   }

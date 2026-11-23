@@ -20,8 +20,11 @@
 > en conceptos**, ver abajo) y el dashboard financiero
 > (T09; implementado y verificado: suite completa con 218 pruebas, 0 fallidas y 0 omitidas,
 > build correcto y revisión manual; sin pruebas HTTP automatizadas de 200 y 404), con pruebas automatizadas y una interfaz para esas capacidades (el estado de
-> verificación está en `docs/work-tickets.md` §4.6 y §4.7). **El MVP no está terminado**:
-> siguen pendientes, entre otros, la integración con la API de UF (T10) y los documentos (T11), además del
+> verificación está en `docs/work-tickets.md` §4.6 y §4.7). La **integración con la UF (T10)**
+> también está implementada: valores históricos de findic.cl conservados por período y
+> equivalentes en CLP en el crédito, su registro mensual y el dashboard (ver «Estado funcional» y
+> `docs/work-tickets.md` §4.10). **El MVP no está terminado**:
+> siguen pendientes, entre otros, los documentos (T11), además del
 > despliegue. El ticket de aportes de capital (T08) se canceló por decisión de producto. Lo que describen las secciones para esas capacidades es diseño propuesto; cada
 > sección distingue lo implementado de lo propuesto. El detalle técnico completo vive en
 > `docs/`; este documento lo resume e integra, sin duplicarlo.
@@ -150,8 +153,9 @@ aplicación funcionando.
 TypeScript, Tailwind CSS 4, Route Handlers como API REST, Prisma 6 sobre
 PostgreSQL, Auth.js (`next-auth` 5 beta, proveedor de credenciales con sesión JWT),
 `argon2` para el hash de la contraseña, Zod 4 para validar entradas, y pruebas con el
-ejecutor nativo `node --test` (+ `tsx`). **Aún no implementado** (diseño propuesto):
-object storage S3, integración con la API de UF, Vercel/Neon.
+ejecutor nativo `node --test` (+ `tsx`), y la API pública de UF de findic.cl (consultada
+con `fetch` nativo). **Aún no implementado** (diseño propuesto): object storage S3 y
+Vercel/Neon.
 
 **Requisitos previos:** Node.js (≥ 20; desarrollado con 23.11) con npm, y Docker con
 Docker Compose para la base de datos local.
@@ -173,7 +177,8 @@ Variables que usa el código: `DATABASE_URL` y `DIRECT_URL` (conexión a Postgre
 Prisma las lee de `.env`), `SEED_USER_EMAIL` y `SEED_USER_PASSWORD` (credenciales del
 usuario único que crean los seeds), el secreto de sesión de Auth.js (`AUTH_SECRET`,
 estándar de Auth.js v5; confirma su nombre en `.env.example`) y, solo para las pruebas
-de integración, `TEST_DATABASE_URL`. Para la base local de Docker Compose la URL tiene
+de integración, `TEST_DATABASE_URL`. Opcionalmente `UF_API_BASE_URL` (endpoint de la API de
+UF; por defecto `https://findic.cl/api/uf`, sin API key). Para la base local de Docker Compose la URL tiene
 la forma `postgresql://realtytrack:<contraseña de docker-compose.yml>@localhost:5436/realtytrack`.
 
 **3. Iniciar PostgreSQL con Docker Compose** (PostgreSQL 16, puerto `5436`, base y
@@ -229,8 +234,8 @@ movimientos financieros como egresos manuales (T07: migración
 `20261109120000_add_movimiento_financiero` aplicada, suite completa con 199 pruebas sin
 fallos ni omisiones, build correcto y revisión manual de la interfaz) y dashboard
 financiero (T09: `/dashboard` y resumen mensual en el detalle de la propiedad; implementado,
-suite completa de 218 pruebas sin fallos ni omisiones, build y revisión manual correctos; sin
-equivalente en CLP de la UF, que depende de T10).
+suite completa de 218 pruebas sin fallos ni omisiones, build y revisión manual correctos; su
+equivalente en CLP del saldo en UF se añadió después con T10).
 **Ampliación de T07 — gasto simple o desglosado:** un movimiento puede registrarse como un
 único monto o desglosado en 1 a 50 conceptos, cada uno con nombre y monto en CLP. La suma de
 los conceptos es el total del movimiento, calculado en el servidor y guardado en
@@ -247,7 +252,47 @@ uno desglosado con tres conceptos y total de 150.000 CLP; los demás flujos de l
 siguen pendientes de revisión manual.
 **Cancelado:** aportes de capital (T08), por decisión de producto; el gasto se registra una
 sola vez, como egreso.
-**Pendiente del MVP:** valor de la UF (T10), documentos (T11) y despliegue.
+**Integración con la UF (T10) — implementada.** El valor de la UF se obtiene de la API pública
+de findic.cl (`GET /api/uf/{dd-mm-yyyy}`) bajo un puerto `ProveedorUf` intercambiable, y se
+guarda una vez por período en `valor_uf_periodo` (migración
+`20261118120000_add_valor_uf_periodo`), con la fecha del valor, la fuente y el momento de
+obtención. La **referencia de cada período es el día 1 del mes**. Un valor ya almacenado no se
+sobrescribe, ni siquiera ante consultas concurrentes (inserción idempotente), de modo que un
+mes anterior da las mismas cifras aunque la UF cambie después. Sin valor almacenado, el valor
+se consulta bajo demanda; si el proveedor no tiene datos (`serie: []`) o falla, no se estima,
+ni se interpola, ni se usa otro período: el equivalente queda `null` y la interfaz muestra
+«No disponible» sin interrumpir la funcionalidad principal. El cliente valida la respuesta
+(fecha exacta, valor positivo, 2 decimales como máximo), usa un timeout de 5 s y convierte el
+valor a `Decimal`; las conversiones UF → CLP se hacen en el servidor con `Decimal`, sin
+`number`, y no se persisten. Se consultan como máximo 6 períodos a la vez, y tras 6 fallos
+consecutivos del proveedor una misma ejecución deja de iniciar consultas (las ya iniciadas
+terminan y conservan sus valores válidos).
+
+Los equivalentes en CLP son **informativos y opcionales**; el monto original sigue siendo la UF:
+
+| Importe en UF | UF utilizada | Dónde se ve |
+|---|---|---|
+| Cuota contractual | Mes actual | Crédito |
+| Saldo inicial | Mes de `fecha_otorgamiento` (si falta, «Sin fecha de otorgamiento») | Crédito |
+| Último saldo registrado y saldo de cada mes | `periodo` del propio registro | Crédito y registro mensual |
+| Saldo de crédito del dashboard | Mes consultado (se conserva el período original del saldo) | Dashboard |
+
+Los campos añadidos a las respuestas son opcionales (`cuotaContractualClp`, `saldoInicialClp`,
+`ultimoSaldo`, `equivalenteClp`): los contratos anteriores no cambian y los cálculos
+financieros de T07 y T09 (ingresos, dividendos, egresos, flujo neto, estados de pago, y el
+gasto desglosado contado una sola vez) no se modifican; la ficha de propiedad no consulta la UF.
+El error de dependencia externa (503) para operaciones cuyo resultado principal dependa de la
+UF **no está implementado**: ninguna lo necesita todavía.
+
+*Verificación (ejecutada por el usuario en su entorno local):* `npm test` con 352 pruebas, 0
+fallidas y 0 omitidas; TypeScript y ESLint sin errores; `npm run build` correcto; consulta real
+a findic.cl (`01-03-2026` → 39796.31; `01-01-2030` → `serie: []`) y del cliente
+(`ok` y `sin-datos`); revisión visual del crédito, el registro mensual y el dashboard, con
+proveedor sin datos y proveedor inaccesible, la persistencia en `valor_uf_periodo` y los JSON
+de los GET. **Salvedad:** el escenario de crédito sin `fecha_otorgamiento` tiene cobertura
+automatizada, pero **no se comprobó visualmente**. Detalle: `docs/work-tickets.md` §4.10.
+
+**Pendiente del MVP:** documentos (T11) y despliegue.
 
 ---
 
@@ -272,7 +317,7 @@ flowchart TB
     end
 
     PG[("Neon<br/>PostgreSQL")]
-    APIUF["API pública de UF<br/>proveedor a validar"]
+    APIUF["API pública de UF<br/>findic.cl"]
     S3[("Object storage<br/>compatible con S3<br/>proveedor a validar")]
 
     Navegador -->|"HTTP · lectura"| UI
@@ -295,8 +340,8 @@ flowchart TB
 ```
 
 *(Diagrama de la arquitectura del MVP: la aplicación, la API REST, Prisma/PostgreSQL y
-Auth.js están implementados; el almacenamiento de documentos, la API de la UF y el
-despliegue siguen siendo diseño propuesto. Fuente versionable: [docs/diagrams/architecture.mmd](docs/diagrams/architecture.mmd).)*
+Auth.js y la integración con la API de UF (findic.cl) están implementados; el almacenamiento
+de documentos y el despliegue siguen siendo diseño propuesto. Fuente versionable: [docs/diagrams/architecture.mmd](docs/diagrams/architecture.mmd).)*
 
 RealtyTrack es una **aplicación full-stack única** —un repositorio, un
 despliegue, una base de datos—, organizada en cuatro capas (UI, API,
@@ -329,7 +374,7 @@ contrato y configuración para servir a un único consumidor.
 | Servicios (`server/services/`) | TypeScript | Orquestar: leer, aplicar reglas, escribir; agregaciones mensuales y regla de caja |
 | Dominio (`server/domain/`) | TypeScript, funciones puras | Reglas con precedencia: estado del pago, fecha de completitud, monto vigente, conversión UF→CLP |
 | Persistencia (`server/db/`) | Prisma + PostgreSQL (Neon) | Acceso a datos, tipado generado desde el esquema |
-| Integración UF (`server/uf/`) | Puerto `ProveedorUf` | Obtener el valor de la UF por fecha; proveedor concreto *propuesta a validar* |
+| Integración UF (`server/uf/`) | Puerto `ProveedorUf`, cliente findic.cl, servicio con persistencia idempotente | Obtener y conservar el valor de la UF por período (día 1), sin estimar; equivalentes en CLP opcionales |
 | Documentos (`server/storage/`) | Puerto `AlmacenDocumentos`, API S3 | URL firmada de subida/lectura, borrado; proveedor concreto *propuesta a validar* |
 | Autenticación (`auth`) | Auth.js, JWT, middleware | Sesión de usuario único; protege UI y API |
 
@@ -343,7 +388,7 @@ app/
   propiedades/      cartera, detalle, crédito y registro mensual,
                     contratos y montos (propiedades/[id]/…)             [implementado]
   api/              Route Handlers — API REST                           [implementado]
-  dashboard/        flujo financiero mensual de cartera                 [previsto]
+  dashboard/        flujo financiero mensual de cartera                 [implementado]
 server/
   auth/             verificación de credenciales y sesión requerida     [implementado]
   domain/           funciones puras: UF, vigencia de contrato, montos   [implementado]
@@ -351,7 +396,8 @@ server/
   services/         orquestación de propiedades, créditos, contratos    [implementado]
   db/               Prisma Client                                       [implementado]
   errors.ts         errores de dominio tipados → HTTP                   [implementado]
-  uf/, storage/     puertos de la UF y del object storage               [previstos]
+  uf/               puerto ProveedorUf, cliente findic.cl, servicio UF  [implementado]
+  storage/          puerto del object storage                           [previsto]
 prisma/
   schema.prisma     esquema, espejo de docs/data-model.md
   migrations/       migraciones versionadas
@@ -417,7 +463,7 @@ Detalle: [docs/architecture.md](docs/architecture.md) §15.
 - Bucket de documentos privado; el acceso es siempre por URL firmada de vida
   corta, nunca público.
 - Sin prefijo público de Next.js en credenciales (regla de diseño aplicable a las
-  futuras variables del object storage y de la UF).
+  futuras variables del object storage).
 
 **Regla de datos (vigente):** los datos reales de las propiedades se anonimizan antes de
 versionar (nombres, RUT, direcciones, montos, documentos) y se cargan por un script de
@@ -428,9 +474,12 @@ Detalle: [docs/architecture.md](docs/architecture.md) §11, §16.
 ### **2.6. Tests**
 
 > **Estado real:** hay pruebas automatizadas ejecutables con `npm test` (`node --test`):
-> **144 pruebas, 0 fallidas, 0 omitidas** en la última ejecución verificada (desarrollo
-> de T05), cubriendo unitarias de esquemas y dominio, integración de servicios contra
-> PostgreSQL de pruebas aislada, y control de acceso de la API (`tests/auth/proxy.test.ts`).
+> **352 pruebas, 0 fallidas, 0 omitidas** en la última ejecución verificada (desarrollo
+> de T10, ejecutada por el usuario con PostgreSQL local), cubriendo unitarias de esquemas y
+> dominio, integración de servicios contra PostgreSQL de pruebas aislada, control de acceso de
+> la API (`tests/auth/proxy.test.ts`) y la integración de UF: cliente con `fetch` simulado,
+> concurrencia máxima y corte anticipado, persistencia idempotente, y equivalentes de crédito,
+> registro mensual y dashboard con cálculos financieros idénticos con y sin UF.
 > No hay pruebas extremo a extremo automatizadas ni de componentes de interfaz; la
 > interfaz se verificó manualmente. La tabla describe la estrategia completa, incluidos
 > los niveles aún no implementados.
@@ -622,8 +671,8 @@ erDiagram
 
 *(Modelo lógico del MVP: están en el esquema Prisma las entidades de propiedad, crédito y
 registro mensual, usuario, arrendatario, contrato, `contrato_monto`, `pago_esperado`,
-`abono_arriendo`, `movimiento_financiero` y `movimiento_concepto`; el resto (documentos, UF) es
-diseño propuesto. Fuente versionable:
+`abono_arriendo`, `movimiento_financiero`, `movimiento_concepto` y `valor_uf_periodo`; el
+resto (documentos) es diseño propuesto. Fuente versionable:
 [docs/diagrams/data-model.mmd](docs/diagrams/data-model.mmd).)*
 
 `USUARIO` y `VALOR_UF_PERIODO` no tienen relaciones: el primero solo guarda
@@ -645,7 +694,7 @@ consultada por período.
 | `abono_arriendo` | Cada entrega de dinero recibida contra un pago esperado | PK `id`; FK `pago_esperado_id` | Sin tope: los abonos pueden exceder el monto esperado sin rechazar el registro |
 | `movimiento_financiero` | Egresos e inversiones de una propiedad | PK `id`; FK `propiedad_id` | `ENUM categoria_movimiento` sin valor `DIVIDENDO`, para no duplicar esa salida de dinero. `monto_clp` es siempre el total del gasto: si está desglosado, es la suma de sus conceptos y las agregaciones no los suman de nuevo |
 | `movimiento_concepto` | Concepto (nombre y monto) de un gasto desglosado; parte del movimiento, no un movimiento aparte | PK `id`; FK `movimiento_financiero_id` | `ON DELETE CASCADE`; `CHECK` monto > 0; sin conceptos = gasto simple (los movimientos existentes no se migran) |
-| `valor_uf_periodo` | Valor de la UF asociado a cada período mensual | PK `periodo` | No se sobrescribe por una consulta posterior a la API, una vez almacenado |
+| `valor_uf_periodo` | Valor de la UF asociado a cada período mensual (día 1) | PK `periodo` (día 1) | No se sobrescribe por una consulta posterior a la API, una vez almacenado; `CHECK` valor > 0 y período día 1; guarda `fecha_valor`, `fuente` y `obtenido_en` |
 | `documento` | Metadata de los archivos; el binario vive en object storage | PK `id`; FK `propiedad_id` obligatoria + 4 FK específicas opcionales | `CHECK`: a lo sumo una de las cuatro FK opcionales es no nula |
 
 Detalle exhaustivo de cada atributo, tipo y restricción:
@@ -842,47 +891,71 @@ El estado derivado (`PENDIENTE` · `PARCIALMENTE_PAGADO` · `VENCIDO` · `PAGADO
 `recibidoClp`, `saldoPendienteClp`, `fechaCompletitud` y las calificaciones) se obtiene
 con el `GET` del listado de pagos; nunca es una columna (`docs/data-model.md` §6, §6.1).
 
-### 4.3 `GET /api/dashboard?periodo=YYYY-MM`
+### 4.3 `GET /api/dashboard?mes=YYYY-MM`
 
-Consultar el flujo financiero de la cartera en un período mensual.
-Agregación en PostgreSQL que respeta la regla de caja: ingresos por
-`fecha_recepcion`, egresos por `fecha` / `fecha_pago_dividendo` — nunca por
-`periodo` (`docs/data-model.md` §7; `docs/architecture.md` §10).
+Consultar el flujo financiero de la cartera en un mes: totales de cartera, resumen por
+propiedad, estado de los pagos del mes y saldo de crédito en UF con su equivalente en CLP.
+Totales por regla de caja: ingresos por `fecha_recepcion`, dividendos por
+`fecha_pago_dividendo` y otros egresos por `fecha` — nunca por `periodo`
+(`docs/data-model.md` §7; `docs/architecture.md` §10). Una consulta por tabla y agrupado en
+TypeScript con aritmética `bigint`.
 
 ```yaml
 paths:
   /api/dashboard:
     get:
-      summary: Consultar el flujo financiero de la cartera en un período mensual
+      summary: Consultar el flujo financiero de la cartera en un mes
       parameters:
-        - name: periodo
+        - name: mes
           in: query
-          required: true
+          required: false
+          description: Sin él, el mes actual de Chile
           schema: { type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$", example: "2026-03" }
       responses:
-        "200": { description: "Agregados del período, en cero si no hay movimientos" }
+        "200": { description: "Totales, resumen por propiedad y estado de pagos del mes; en cero si no hay movimientos" }
+        "400": { description: "`mes` inválido" }
         "401": { description: "Sin sesión" }
 ```
 
-Ejemplo:
+Ejemplo (cifras ficticias; la lista `pagos` se omite por brevedad):
 
-`GET /api/dashboard?periodo=2026-03`
+`GET /api/dashboard?mes=2026-03`
 
 Respuesta `200`:
 
 ```json
 {
-  "periodo": "2026-03",
-  "ingresos_clp": "500000",
-  "egresos_clp": "650000",
-  "flujo_neto_clp": "-150000",
-  "saldo_creditos_uf": "812.4"
+  "mes": "2026-03",
+  "totales": {
+    "ingresosClp": "500000",
+    "dividendosClp": "450000",
+    "otrosEgresosClp": "200000",
+    "egresosTotalesClp": "650000",
+    "flujoNetoClp": "-150000"
+  },
+  "propiedades": [
+    {
+      "propiedadId": "…",
+      "numeroDepartamento": "101",
+      "ingresosClp": "500000",
+      "dividendosClp": "450000",
+      "otrosEgresosClp": "200000",
+      "egresosTotalesClp": "650000",
+      "flujoNetoClp": "-150000",
+      "saldoCredito": {
+        "periodo": "2026-02",
+        "saldoPendienteUf": "812.4",
+        "equivalenteClp": { "valorClp": "31683600", "ufClp": "39000.00", "fechaReferencia": "2026-03-01" }
+      },
+      "pagos": []
+    }
+  ]
 }
 ```
 
-El nombre exacto de cada campo y el desglose por propiedad son **contrato
-API propuesto de Entrega 1**; las cifras y su regla de cálculo sí están
-confirmadas por `docs/product.md` §6.5 y `docs/data-model.md` §6.
+`saldoCredito` es `null` si no hay saldo registrado hasta el mes, y `equivalenteClp` es `null`
+si la UF del mes consultado no está disponible (T10); el período original del saldo se
+conserva. Los importes viajan como texto para no perder precisión.
 
 ---
 

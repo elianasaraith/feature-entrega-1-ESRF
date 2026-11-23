@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: Context) {
     const hoy = hoyChile();
     const crudo = new URL(request.url).searchParams.get("mes");
     const mes = crudo === null ? hoy.slice(0, 7) : yearMonth.parse(crudo);
-    return Response.json(await dashboardService.resumenPropiedad(id, mes, hoy));
+    return Response.json(await dashboardService.resumenPropiedadConEquivalentes(id, mes, hoy));
   } catch (error) {
     return toHttpResponse(error);
   }

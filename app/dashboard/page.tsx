@@ -4,6 +4,7 @@ import { hoyChile } from "@/server/clock";
 import { etiquetaCalificacionPago, formatearClp, formatearUf } from "@/server/domain/dashboard";
 import { yearMonth } from "@/server/schemas/shared";
 import { dashboardService } from "@/server/services";
+import { etiquetaMes, formatearMontoClp, formatearValorUf, referenciasUf } from "@/server/uf/equivalente";
 import { ResumenMensual } from "../_components/resumen-mensual";
 import { SelectorMes } from "../_components/selector-mes";
 
@@ -35,7 +36,11 @@ async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
   const hoy = hoyChile();
   const parsed = yearMonth.safeParse(Array.isArray(crudo) ? crudo[0] : crudo);
   const mes = parsed.success ? parsed.data : hoy.slice(0, 7);
-  const resumen = await dashboardService.resumenMensual(mes, hoy);
+  const resumen = await dashboardService.resumenMensualConEquivalentes(mes, hoy);
+  // Única referencia compartida: todos los saldos se convierten con la UF del mes
+  // consultado. Solo existe si alguna UF se utilizó efectivamente.
+  const referencia =
+    referenciasUf(resumen.propiedades.map((p) => p.saldoCredito?.equivalenteClp ?? null))[0] ?? null;
   const pagos = resumen.propiedades.flatMap((p) =>
     p.pagos.map((pago) => ({ ...pago, depto: p.numeroDepartamento }))
   );
@@ -114,9 +119,19 @@ async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
                 <td className="text-right tabular-nums">$ {formatearClp(p.egresosTotalesClp)}</td>
                 <td className="text-right tabular-nums">$ {formatearClp(p.flujoNetoClp)}</td>
                 <td className="text-right tabular-nums">
-                  {p.saldoCredito
-                    ? `${formatearUf(p.saldoCredito.saldoPendienteUf)} (${p.saldoCredito.periodo})`
-                    : "Sin saldo registrado"}
+                  {p.saldoCredito ? (
+                    <>
+                      {formatearUf(p.saldoCredito.saldoPendienteUf)} UF ({p.saldoCredito.periodo})
+                      <span className="block text-xs">
+                        CLP:{" "}
+                        {p.saldoCredito.equivalenteClp
+                          ? formatearMontoClp(p.saldoCredito.equivalenteClp)
+                          : "No disponible"}
+                      </span>
+                    </>
+                  ) : (
+                    "Sin saldo registrado"
+                  )}
                 </td>
               </tr>
             ))}
@@ -124,9 +139,13 @@ async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
         </table>
       </section>
 
-      <p className="text-xs text-gray-600">
-        Pendiente de otro ticket: equivalente en CLP del saldo en UF (T10).
-      </p>
+      {referencia && (
+        <p className="text-xs text-black/60">
+          Equivalentes en CLP calculados con la UF de {etiquetaMes(`${mes}-01`)}:{" "}
+          {formatearValorUf(referencia)} · referencia {referencia.fechaReferencia}. El período de cada
+          saldo puede ser anterior al mes usado para la conversión.
+        </p>
+      )}
     </>
   );
 }

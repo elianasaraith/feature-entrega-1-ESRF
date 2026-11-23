@@ -5,6 +5,9 @@ import type {
   RegistroMensualActualizarInput,
   RegistroMensualCrearInput,
 } from "@/server/schemas/credito-registro";
+import { calcularEquivalenteClp } from "@/server/uf/equivalente";
+import type { EquivalenteClpDto } from "@/server/uf/equivalente";
+import type { UfService, ValorUfDto } from "@/server/uf/uf-service";
 import { SIN_CREDITO, asegurarPropiedad } from "./propiedad-lookup";
 
 // `periodo` viaja como YYYY-MM y se guarda como el día 1 del mes. Un mes sin
@@ -16,6 +19,12 @@ export type RegistroMensualDto = {
   dividendoPagadoClp: string | null;
   fechaPagoDividendo: string | null;
   saldoPendienteUf: string | null;
+};
+
+// T10: añade el equivalente en CLP del saldo pendiente, calculado con la UF del
+// `periodo` del propio registro. null = sin saldo, mes sin registro o UF no disponible.
+export type RegistroMensualConEquivalenteDto = RegistroMensualDto & {
+  equivalenteClp: EquivalenteClpDto;
 };
 
 export type UltimoSaldoDto = { periodo: string; saldoPendienteUf: string };
@@ -55,7 +64,32 @@ function isKnownError(error: unknown, code: string): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
 }
 
-export function createCreditoRegistroService(prisma: PrismaClient) {
+// `uf` es opcional: sin él, todo equivalente en CLP es null.
+export function createCreditoRegistroService(prisma: PrismaClient, uf?: UfService) {
+  // Un fallo al resolver la UF nunca interrumpe la consulta principal.
+  async function resolverUf(periodos: string[]): Promise<Map<string, ValorUfDto>> {
+    if (!uf || periodos.length === 0) return new Map();
+    try {
+      return await uf.obtenerValores(periodos);
+    } catch (error) {
+      console.error("No se pudo resolver la UF para los equivalentes del registro mensual", error);
+      return new Map();
+    }
+  }
+
+  // Una sola resolución agrupada y sin duplicados para todos los registros con saldo.
+  async function conEquivalentes(
+    registros: RegistroMensualDto[]
+  ): Promise<RegistroMensualConEquivalenteDto[]> {
+    const valores = await resolverUf(
+      registros.filter((r) => r.saldoPendienteUf !== null).map((r) => r.periodo)
+    );
+    return registros.map((r) => ({
+      ...r,
+      equivalenteClp: calcularEquivalenteClp(r.saldoPendienteUf, valores.get(r.periodo)),
+    }));
+  }
+
   // El crédito se resuelve desde la propiedad (relación 1 : 0..1).
   async function creditoIdDe(propiedadId: string): Promise<string> {
     await asegurarPropiedad(prisma, propiedadId);
@@ -76,6 +110,18 @@ export function createCreditoRegistroService(prisma: PrismaClient) {
         orderBy: { periodo: "desc" },
       });
       return filas.map(toDto);
+    },
+
+    async listarConEquivalentes(propiedadId: string): Promise<RegistroMensualConEquivalenteDto[]> {
+      return conEquivalentes(await this.listar(propiedadId));
+    },
+
+    async obtenerPorPeriodoConEquivalentes(
+      propiedadId: string,
+      periodo: string
+    ): Promise<RegistroMensualConEquivalenteDto> {
+      const [registro] = await conEquivalentes([await this.obtenerPorPeriodo(propiedadId, periodo)]);
+      return registro;
     },
 
     async obtenerPorPeriodo(propiedadId: string, periodo: string): Promise<RegistroMensualDto> {

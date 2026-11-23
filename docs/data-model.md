@@ -581,7 +581,14 @@ mensual ni inmutabilidad de períodos**.
 `fecha_valor`, `fuente` y `obtenido_en` hacen auditable cualquier conversión histórica: se
 sabe exactamente qué valor se usó y de dónde salió.
 
-La regla que decide **qué día representa al período** es una *propuesta a validar*: ver §8.
+**Implementación (T10).** Migración `20261118120000_add_valor_uf_periodo`. `periodo` es el día 1
+del mes y la PK; `obtenido_en` toma `now()` por defecto; `fuente` guarda `findic.cl`. Los
+`CHECK` `valor_clp > 0` y *período = día 1* viven en la migración SQL (Prisma 6 no los expresa).
+Una fila solo se crea con un valor que el proveedor devolvió y que pasó la validación; nunca se
+persisten estimaciones, errores ni respuestas vacías, y la inserción es idempotente (no
+sobrescribe).
+
+El día que representa al período es **día 1**: decisión confirmada, ver §8.4 y D17.
 
 ### 4.13 `documento`
 
@@ -920,15 +927,19 @@ mismas cifras, aunque la UF haya cambiado entre ambas consultas (criterio de éx
 HU03 E9). Una cifra histórica cambia únicamente si el usuario edita explícitamente algún
 dato de ese mes (HU03 E10).
 
-### 8.4 Regla del día de referencia — *propuesta a validar*
+### 8.4 Regla del día de referencia — *decisión: día 1 del período (T10)*
 
 **Confirmado**: el valor efectivamente utilizado para cada período queda almacenado con su
 `fecha_valor`, su `fuente` y el instante de obtención, y no cambia por consultas
 posteriores.
 
-**Pendiente de validación**: qué día del mes debe representar al período. La convención
-afecta directamente al resultado financiero de cada mes, así que no se cierra en este
-documento.
+**Decisión (T10, D17): el día 1 del mes representa al período.** Se eligió la primera opción
+de la tabla de abajo, que no cambia el esquema; se conserva el análisis porque justifica por
+qué las otras dos no se adoptaron. Es siempre un valor disponible y estable desde que empieza
+el mes. La convención vive en un único punto del código, así que cambiarla a «último día del
+mes» sería una modificación local. El importe convertido usa la UF del período que cada
+consulta indica: para el saldo del crédito del dashboard, el **mes consultado**, y para el
+saldo de un registro mensual, el `periodo` del registro (`architecture.md` §12.5).
 
 **Las tres opciones no son equivalentes en coste.** Las dos primeras son convenciones sobre
 qué día se consulta a la API y qué valor se guarda en `fecha_valor`: el esquema actual las
@@ -1008,12 +1019,13 @@ la serie diaria, y §6, donde la conversión UF → CLP se define por período y
 | D14 | Valor de compra con moneda explícita | En Chile la compra suele pactarse en UF |
 | D15 | El desglose de un gasto es una entidad hija (`movimiento_concepto`) y el total se guarda en `movimiento_financiero.monto_clp` | T09 y las agregaciones no cambian ni pueden contar un gasto dos veces; los movimientos existentes quedan como gastos simples sin migrar datos |
 | D16 | Al editar un movimiento, `conceptos` ausente conserva el desglose, `[]` lo convierte en simple y una lista lo reemplaza | Un cliente que desconoce los conceptos no los pierde por omisión; la pérdida exige una acción explícita |
+| D17 | El día 1 del mes representa al período en `valor_uf_periodo` | Siempre disponible y estable; no cambia el esquema ni la premisa de un valor por período (§8.4) |
 
 ### 10.2 Propuestas a validar
 
 | # | Propuesta | Qué está en juego |
 |---|---|---|
-| P1 | **Regla del día de referencia de la UF** (§8.4) | Afecta al resultado financiero de cada mes. Dos de las tres opciones no cuestan nada en el esquema; la tercera obligaría a cambiar el modelo |
+| P1 | **Regla del día de referencia de la UF** (§8.4) | *Cerrada en T10: día 1 del período (D17).* Se conserva para trazabilidad |
 | P2 | `propiedad.direccion` como campo nulable | `product.md` §6.1 no lo exige; se propone porque el modelo es para N propiedades |
 | P3 | Nomenclatura en español para tablas y columnas | Coherencia con el vocabulario de dominio frente a la convención habitual del stack |
 

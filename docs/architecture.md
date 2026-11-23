@@ -88,7 +88,7 @@ flowchart TB
     end
 
     PG[("Neon<br/>PostgreSQL")]
-    APIUF["API pública de UF<br/>proveedor a validar"]
+    APIUF["API pública de UF<br/>findic.cl"]
     S3[("Object storage<br/>compatible con S3<br/>proveedor a validar")]
 
     Navegador -->|"HTTP · lectura"| UI
@@ -475,9 +475,16 @@ sistema **no lo estima ni lo calcula**.
 Una interfaz con una sola operación —obtener el valor de la UF para una fecha concreta— y
 una implementación detrás.
 
-La abstracción está justificada y no es especulativa: el proveedor concreto **está sin
-decidir** (*propuesta a validar*), y aislarlo permite documentar y construir la arquitectura
-sin cerrarlo.
+La abstracción está justificada y no es especulativa: aísla al proveedor HTTP del resto del
+sistema. **Proveedor implementado en T10: findic.cl** (`GET {UF_API_BASE_URL}/{dd-mm-yyyy}`,
+por defecto `https://findic.cl/api/uf`, sin API key); cambiarlo solo exige otra
+implementación del puerto. Vive en `server/uf/` (`proveedor.ts`, `findic.ts`,
+`uf-service.ts`, `equivalente.ts`).
+
+El cliente HTTP valida la respuesta antes de usarla —estado 2xx, JSON, `serie` de un solo
+elemento, fecha igual a la solicitada, valor numérico positivo con a lo sumo 2 decimales—,
+tiene un timeout de 5 s y devuelve un resultado (`ok`, `sin-datos` o `error`) en lugar de
+lanzar. `serie: []` es *sin datos*: ausencia legítima, no una caída.
 
 ### 12.2 Flujo
 
@@ -495,10 +502,26 @@ flowchart LR
 lo que sostiene el criterio de éxito 4: consultar dos veces un mes anterior produce las
 mismas cifras aunque la UF haya cambiado entre ambas consultas.
 
+La inserción es idempotente (`INSERT … ON CONFLICT DO NOTHING`, vía `createMany` con
+`skipDuplicates`) y va seguida de una relectura: ante dos consultas concurrentes del mismo
+período queda una sola fila y ambas devuelven el mismo valor. Los errores y las respuestas
+vacías no se persisten.
+
 ### 12.3 Momento de la consulta
 
 **Bajo demanda**, sin trabajo programado. Una tarea periódica sería infraestructura adicional
 para adelantar un dato que puede obtenerse cuando hace falta.
+
+Los períodos sin valor se consultan deduplicados y agrupados, con **un máximo de 6 llamadas
+HTTP simultáneas**. Para no esperar varias rondas de timeout cuando el proveedor está caído,
+cada invocación tiene un **corte anticipado**: tras **6 fallos consecutivos** (error, timeout,
+excepción o respuesta inconsistente) deja de iniciar nuevas consultas. Las ya iniciadas
+terminan y sus valores válidos se conservan; los períodos no consultados quedan sin
+equivalente. «Consecutivos» se mide en orden de finalización; una respuesta válida o una serie
+vacía reinician el contador y la serie vacía nunca cuenta como fallo. Como mucho se inician 11
+consultas (umbral + concurrencia − 1). No hay estado entre solicitudes: la siguiente
+invocación empieza de cero. Con el proveedor sin responder, el peor caso son unas dos rondas
+de timeout.
 
 ### 12.4 Qué ocurre si la API falla
 
@@ -515,20 +538,41 @@ todas las consultas la necesitan igual:
 | La UF solo aporta un **equivalente opcional** en CLP | **Degradación parcial**: la operación tiene éxito, se muestra el valor en UF y el equivalente en CLP se marca como no disponible |
 | El **resultado principal** de la operación no puede producirse sin la UF | La operación falla y se informa como error de dependencia externa (§17) |
 
+**Estado en T10:** todos los equivalentes implementados son opcionales, así que se aplica
+siempre la degradación parcial (equivalente `null`, «No disponible»). El caso del error de
+dependencia externa **no está implementado**: ninguna operación actual depende de la UF para
+su resultado principal, y `UfNoDisponibleError` y su 503 se añadirán cuando exista un
+consumidor real.
+
 El primer caso es el habitual: `product.md` §6.5 establece que el equivalente en CLP
 acompaña al valor en UF *"cuando sea útil"*, sin reemplazarlo. Que falte no invalida la
 consulta — el saldo del crédito en UF sigue siendo el dato principal y sigue siendo
 correcto. Tumbar la vista de un mes entero por un dato accesorio sería peor que mostrarlo
 incompleto y decirlo.
 
-### 12.5 La regla del día de referencia sigue abierta
+### 12.5 Día de referencia y período de cada equivalente
 
-`data-model.md` §8.4 deja pendiente **qué día del mes representa a cada período**, porque la
-convención afecta al resultado financiero. **Este documento no la cierra.**
+**Decisión confirmada (T10): el día 1 del mes representa al período.** `data-model.md` §8.4
+lo documenta con sus alternativas. La firma del puerto recibe una fecha, de modo que la
+convención vive en **un solo punto** (`fechaReferenciaPeriodo`) y cambiarla no obliga a tocar
+la integración ni el esquema.
 
-La arquitectura la respeta del único modo posible: la firma del puerto recibe una fecha, de
-modo que la convención vive en **un solo punto configurable** y cambiarla no obliga a tocar
-la integración.
+Qué período usa cada equivalente en CLP:
+
+| Importe en UF | UF utilizada |
+|---|---|
+| Cuota contractual del crédito | Mes actual |
+| Saldo inicial del crédito | Mes de `fecha_otorgamiento`; si es `null`, el equivalente es `null` (no se inventa otra referencia) |
+| Último saldo registrado y saldo de cada registro mensual | `periodo` del propio registro |
+| Saldo de crédito del dashboard | **Mes consultado**; se conserva el período original del saldo, que puede ser anterior |
+
+El equivalente se calcula en el servidor con `convertirUfAClp` sobre `Decimal` y se entrega
+como `{ valorClp, ufClp, fechaReferencia }` o `null`; no se redondea ni se persiste (el
+redondeo es solo de presentación). Es informativo: **nunca entra en los totales, el flujo
+neto ni los estados de pago** del dashboard. Para no consultar la UF donde no hace falta, el
+dashboard ofrece métodos específicos (`resumenMensualConEquivalentes`,
+`resumenPropiedadConEquivalentes`); los originales, que usa la ficha de propiedad, no la
+consultan. Los campos añadidos a los DTO son opcionales: los contratos anteriores no cambian.
 
 ---
 
@@ -641,7 +685,7 @@ las necesidades concretas de las pruebas sobre vistas previa.
 | Cadena de conexión directa | Migraciones y tareas administrativas |
 | Secreto de firma de sesión | Firma del JWT de Auth.js |
 | Credenciales del object storage | Clave, secreto, región y bucket |
-| URL base del proveedor de UF | Endpoint de la API pública |
+| URL base del proveedor de UF (`UF_API_BASE_URL`, opcional) | Endpoint de la API pública; por defecto `https://findic.cl/api/uf` |
 
 **Reglas**
 
@@ -671,7 +715,8 @@ en **un único punto**, con un cuerpo de respuesta uniforme.
 | Fallo inesperado | 500, sin detalles internos |
 
 **El 503 se reserva para las operaciones cuyo resultado principal no puede producirse sin la
-UF.** No es la respuesta habitual ante una UF ausente.
+UF.** No es la respuesta habitual ante una UF ausente. *Estado:* reservado y **no
+implementado**; las operaciones actuales (T10) solo usan la UF como equivalente opcional.
 
 Cuando la UF solo aportaba un **equivalente opcional en CLP**, la operación **tiene éxito** y
 la respuesta incluye el valor en UF con el equivalente marcado como no disponible (§12.4). La
@@ -797,8 +842,9 @@ controlado y anonimizado, sin importador.
 | Agregación con Prisma; SQL específico solo donde aporte | Conserva tipado y `Decimal`; SQL crudo no es una regla |
 | Rutas dinámicas para lo que depende de la fecha actual | Una página cacheada mostraría estados obsoletos |
 | Auth.js con credenciales y estrategia JWT | Delega la gestión de sesión; cumple lo que pide `CLAUDE.md` |
-| Puerto `ProveedorUf` y puerto `AlmacenDocumentos` | Los proveedores concretos están sin decidir |
+| Puerto `ProveedorUf` y puerto `AlmacenDocumentos` | Aíslan al proveedor concreto (UF: findic.cl, implementado en T10; almacenamiento: sin decidir) |
 | Consulta de UF bajo demanda, sin trabajo programado | Menos infraestructura para el mismo resultado |
+| Máximo de 6 llamadas simultáneas al proveedor y corte anticipado tras 6 fallos consecutivos, sin estado entre solicitudes | Evita esperar varias rondas de timeout con el proveedor caído, sin infraestructura adicional (§12.3) |
 | Subida directa al bucket por URL firmada | El binario no atraviesa el runtime de la aplicación |
 | Errores de dominio tipados, traducidos en un único punto | Un solo lugar donde decidir el código HTTP |
 | Migraciones como paso deliberado, fuera del build | Evita colisiones entre despliegues concurrentes |
@@ -809,8 +855,8 @@ controlado y anonimizado, sin importador.
 | # | Propuesta | Estado |
 |---|---|---|
 | V1 | **Proveedor concreto de object storage** — R2, S3 o B2 | La interfaz está cerrada (§13.1); el proveedor no |
-| V2 | **API concreta de UF** | El puerto la aísla (§12.1) |
-| V3 | **Día de la UF que representa a cada período** | Abierta en `data-model.md` §8.4; **este documento no la cierra** (§12.5) |
+| V2 | **API concreta de UF** | **Cerrada en T10:** findic.cl; el puerto la aísla (§12.1) |
+| V3 | **Día de la UF que representa a cada período** | **Cerrada en T10:** día 1 del mes (§12.5; `data-model.md` §8.4, D17) |
 | V4 | **Aislamiento de datos en vistas previa** | Pendiente para la fase de implementación (§15.2) |
 | V5 | **Observabilidad externa** | Fuera del MVP; los logs de la plataforma bastan (§17) |
 | V6 | **Pruebas extremo a extremo** | El valor está en los niveles unitario y de integración (§18) |

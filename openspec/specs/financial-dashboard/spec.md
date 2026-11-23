@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Consultar el flujo financiero mensual de la cartera y de cada propiedad —ingresos, dividendos, otros egresos, flujo neto, estado de pagos del mes contractual y saldo de créditos en UF— calculado al consultar por regla de caja, sin persistir derivados. El equivalente en CLP de la UF (T10) queda fuera.
+Consultar el flujo financiero mensual de la cartera y de cada propiedad —ingresos, dividendos, otros egresos, flujo neto, estado de pagos del mes contractual y saldo de créditos en UF— calculado al consultar por regla de caja, sin persistir derivados. El saldo en UF se acompaña de un equivalente en CLP opcional, calculado con el valor de la UF del mes consultado (T10), que es informativo y no modifica ningún total, flujo neto ni estado de pago; si esa UF no está disponible, el equivalente es `null` y se muestra «No disponible».
 ## Requirements
 ### Requirement: Totales mensuales por regla de caja
 El sistema SHALL calcular, para un mes `YYYY-MM`, los ingresos recibidos como la suma de `abono_arriendo.monto_clp` con `fecha_recepcion` en el mes; los dividendos pagados como la suma de `credito_registro_mensual.dividendo_pagado_clp` con `fecha_pago_dividendo` en el mes; y los otros egresos como la suma de `movimiento_financiero.monto_clp` con `fecha` en el mes. Los egresos totales SHALL ser dividendos más otros egresos, y el flujo neto SHALL ser ingresos menos egresos totales, pudiendo ser negativo. Todos los importes SHALL ser CLP enteros operados sin `Number` (BigInt o Decimal). `periodo` y `pago_esperado.periodo` SHALL NOT intervenir en estos totales. No SHALL persistirse ningún total derivado.
@@ -40,7 +40,7 @@ El sistema SHALL calcular, para un mes `YYYY-MM`, los ingresos recibidos como la
 - **THEN** el dividendo se cuenta una sola vez, solo desde el registro mensual del crédito
 
 ### Requirement: Dashboard de cartera
-El sistema SHALL ofrecer `GET /api/dashboard?mes=YYYY-MM` y la página `/dashboard` con los totales mensuales de toda la cartera, el estado de pagos esperados del mes, el saldo de créditos en UF y un resumen por propiedad. El total de cartera SHALL ser igual a la suma de los totales de cada propiedad. Sin `mes`, SHALL usarse el mes de `hoyChile()`. El dashboard SHALL NOT ordenar, puntuar ni comparar propiedades entre sí; el resumen por propiedad SHALL listarse en un orden estable no basado en cifras y enlazar a su detalle. No SHALL mostrar equivalentes en CLP de saldos UF.
+El sistema SHALL ofrecer `GET /api/dashboard?mes=YYYY-MM` y la página `/dashboard` con los totales mensuales de toda la cartera, el estado de pagos esperados del mes, el saldo de créditos en UF con su equivalente opcional en CLP y un resumen por propiedad. El total de cartera SHALL ser igual a la suma de los totales de cada propiedad. Sin `mes`, SHALL usarse el mes de `hoyChile()`. El dashboard SHALL NOT ordenar, puntuar ni comparar propiedades entre sí; el resumen por propiedad SHALL listarse en un orden estable no basado en cifras y enlazar a su detalle. El equivalente en CLP del saldo SHALL NOT alterar ningún total, flujo ni estado de pago.
 
 #### Scenario: Total igual a suma de propiedades
 - **WHEN** hay varias propiedades con movimientos en el mes
@@ -66,9 +66,9 @@ El sistema SHALL ofrecer `GET /api/dashboard?mes=YYYY-MM` y la página `/dashboa
 - **WHEN** se consulta el dashboard
 - **THEN** no existe ranking, puntaje ni indicador que ordene propiedades por rendimiento
 
-#### Scenario: Integración pendiente de T10
-- **WHEN** se muestra el dashboard
-- **THEN** el equivalente en CLP del saldo UF no aparece como cifra y se indica que queda para T10
+#### Scenario: Cifras de rentabilidad intactas
+- **WHEN** se consulta un mes con y sin UF disponible
+- **THEN** ingresos, dividendos, otros egresos, egresos totales, flujo neto y estados de pago son idénticos en ambos casos
 
 ### Requirement: Estado de pagos esperados del mes contractual
 El sistema SHALL presentar los pagos esperados cuyo `pago_esperado.periodo` es el mes consultado, con monto esperado, recibido, saldo pendiente, estado (`PENDIENTE`, `PARCIALMENTE_PAGADO`, `VENCIDO`, `PAGADO`) y calificaciones, obtenidos con `calcularEstadoPago` y `hoyChile()`, sin recalcular reglas ni persistir estados. Los abonos SHALL contarse en su totalidad para el pago, sin importar su `fecha_recepcion`.
@@ -86,19 +86,27 @@ El sistema SHALL presentar los pagos esperados cuyo `pago_esperado.periodo` es e
 - **THEN** la lista de pagos está vacía y no hay error
 
 ### Requirement: Saldo de créditos en UF por período
-El sistema SHALL presentar, por propiedad con crédito, el saldo en UF del registro con `saldo_pendiente_uf` no nulo y mayor `periodo` menor o igual al mes consultado, indicando el período de ese registro. SHALL NOT usar registros posteriores al mes consultado. Sin registro aplicable o sin crédito, SHALL indicarse "sin saldo registrado" en lugar de 0. El saldo SHALL expresarse en UF con hasta 4 decimales y SHALL NOT convertirse a CLP.
+El sistema SHALL presentar, por propiedad con crédito, el saldo en UF del registro con `saldo_pendiente_uf` no nulo y mayor `periodo` menor o igual al mes consultado, indicando el período de ese registro. SHALL NOT usar registros posteriores al mes consultado. Sin registro aplicable o sin crédito, SHALL indicarse "sin saldo registrado" en lugar de 0. El saldo SHALL expresarse en UF con hasta 4 decimales y SHALL acompañarse de un equivalente en CLP calculado en el backend con la UF del mes consultado (`mes`) y de la fecha de referencia de esa UF; el monto en UF SHALL NOT modificarse. Si no existe UF para el mes consultado, el equivalente SHALL ser `null` y la interfaz SHALL mostrar «No disponible». El equivalente SHALL NOT sumarse a ningún total.
 
 #### Scenario: Último registro aplicable
 - **WHEN** hay saldos en enero y marzo y se consulta febrero
-- **THEN** se usa el de enero
+- **THEN** se usa el saldo de enero en UF y su equivalente en CLP se calcula con la UF de febrero
 
 #### Scenario: Mes futuro
 - **WHEN** se consulta un mes posterior al último registro
-- **THEN** se usa el último registro existente y se indica su período
+- **THEN** se usa el último registro existente, se indica su período y el equivalente usa la UF del mes consultado, o es `null` si esa UF no está disponible
 
 #### Scenario: Mes anterior a todo registro
 - **WHEN** el mes es anterior al primer registro con saldo
-- **THEN** se indica "sin saldo registrado"
+- **THEN** se indica "sin saldo registrado" y no hay equivalente
+
+#### Scenario: UF del mes consultado no disponible
+- **WHEN** el registro aplicable existe pero no hay UF para el mes consultado
+- **THEN** el saldo aparece en UF, el equivalente es `null`, la interfaz muestra «No disponible» y el resto del dashboard responde con normalidad
+
+#### Scenario: Histórico estable
+- **WHEN** el dashboard de un mes anterior se consulta dos veces y la UF actual cambió entre ambas
+- **THEN** el equivalente y la fecha de referencia son idénticos en ambas respuestas
 
 ### Requirement: Resumen mensual por propiedad
 El sistema SHALL ofrecer `GET /api/propiedades/{id}/resumen-mensual?mes=YYYY-MM` con ingresos recibidos, dividendos pagados, otros egresos, flujo neto y actividad reciente de esa propiedad, producidos por el mismo `dashboard-service` que la cartera. Responde 404 si la propiedad no existe o el id no es UUID, 400 con mes inválido y 401 sin sesión.

@@ -3,7 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NotFoundError } from "@/server/errors";
 import { creditoRegistroService, propiedadService } from "@/server/services";
-import type { RegistroMensualDto } from "@/server/services/credito-registro-service";
+import type {
+  RegistroMensualConEquivalenteDto,
+  RegistroMensualDto,
+} from "@/server/services/credito-registro-service";
+import { formatearMontoClp, formatearValorUf } from "@/server/uf/equivalente";
 
 export default function RegistroMensualPage({ params }: { params: Promise<{ id: string }> }) {
   return (
@@ -16,7 +20,6 @@ export default function RegistroMensualPage({ params }: { params: Promise<{ id: 
 }
 
 const NO_REGISTRADO = "No registrado";
-// El equivalente en CLP depende de valor_uf_periodo (T10, pendiente).
 const CLP_NO_DISPONIBLE = "No disponible";
 
 // Rótulo derivado, no almacenado: solo si el mes de caja difiere del período.
@@ -32,9 +35,9 @@ async function Historial({ params }: { params: Promise<{ id: string }> }) {
     throw error;
   });
 
-  let registros: RegistroMensualDto[] | null = null;
+  let registros: RegistroMensualConEquivalenteDto[] | null = null;
   try {
-    registros = await creditoRegistroService.listar(id);
+    registros = await creditoRegistroService.listarConEquivalentes(id);
   } catch (error) {
     if (!(error instanceof NotFoundError)) throw error;
   }
@@ -100,7 +103,18 @@ async function Historial({ params }: { params: Promise<{ id: string }> }) {
                   {r.saldoPendienteUf ? (
                     <>
                       {r.saldoPendienteUf} UF
-                      <span className="block text-xs">CLP: {CLP_NO_DISPONIBLE}</span>
+                      {r.equivalenteClp ? (
+                        <>
+                          <span className="block text-xs">
+                            CLP: {formatearMontoClp(r.equivalenteClp)}
+                          </span>
+                          <span className="block text-xs text-black/60">
+                            {formatearValorUf(r.equivalenteClp)} · {r.equivalenteClp.fechaReferencia}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="block text-xs">CLP: {CLP_NO_DISPONIBLE}</span>
+                      )}
                     </>
                   ) : (
                     NO_REGISTRADO

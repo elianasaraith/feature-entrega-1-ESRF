@@ -20,12 +20,12 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 | Herramienta | Uso en RealtyTrack |
 |---|---|
-| Claude Code (extensión de VS Code) | Asistente de código en todas las fases: documentación de la Entrega 1 y desarrollo de T01–T07, T09 y T12, más la ampliación de T07 con desglose de conceptos; T08 se exploró, se implementó localmente y se canceló |
-| OpenSpec | Flujo Spec-Driven Development: `openspec/specs/` (9 capacidades) y `openspec/changes/archive/` (12 cambios archivados: fundación, autenticación, propiedades, créditos, registro mensual, contratos, reajustes, abonos de arriendo, movimientos financieros, dashboard financiero, la retirada de T08 del dashboard y el desglose de conceptos de T07). El cambio `t07-desglose-movimientos` quedó verificado y archivado como `2026-11-18-t07-desglose-movimientos` |
+| Claude Code (extensión de VS Code) | Asistente de código en todas las fases: documentación de la Entrega 1 y desarrollo de T01–T07, T09, T10 y T12, más la ampliación de T07 con desglose de conceptos; T08 se exploró, se implementó localmente y se canceló |
+| OpenSpec | Flujo Spec-Driven Development: `openspec/specs/` (9 capacidades) y `openspec/changes/archive/` (12 cambios archivados: fundación, autenticación, propiedades, créditos, registro mensual, contratos, reajustes, abonos de arriendo, movimientos financieros, dashboard financiero, la retirada de T08 del dashboard y el desglose de conceptos de T07). El cambio `t07-desglose-movimientos` quedó verificado y archivado como `2026-11-18-t07-desglose-movimientos`. El cambio `t10-integracion-uf` está implementado y verificado, pero **no archivado** |
 | Comandos y skills del repositorio | `.claude/commands/opsx/` (explore, propose, apply, verify, archive…) y `.claude/skills/` (skills `openspec-*`) |
 
 **Modelos.** Claude, a través de Claude Code. En la sesión de T05 y en la sesión que cubre T08 y la ampliación de T07 (desglose) el modelo
-fue **Claude Sonnet 5.5**, según lo informa Claude Code; el modelo de las demás sesiones no quedó
+y en la sesión de T10 el modelo fue **Claude Sonnet 5.5**, según lo informa Claude Code; el modelo de las demás sesiones no quedó
 registrado en el repositorio y no se afirma aquí.
 
 **Contexto avanzado (respaldado por el repositorio).**
@@ -43,7 +43,7 @@ registrado en el repositorio y no se afirma aquí.
 
 ## Workflows representativos
 
-Siete workflows concentran el uso de IA; el detalle de los prompts está en las secciones
+Ocho workflows concentran el uso de IA; el detalle de los prompts está en las secciones
 indicadas.
 
 | # | Workflow | Qué demuestra | Dónde |
@@ -55,6 +55,7 @@ indicadas.
 | W5 | Montos, reajustes y pagos esperados (T05): explore → plan → propose → apply → verify → archive | Ciclo completo con el plan corregido por la persona, validación manual y archivo | Sección 6, «T05 — montos…» y abajo |
 | W6 | Cancelación y retirada de T08 (aportes de capital) | Una decisión de producto aplicada sin perder el historial: se retiró solo el código de T08, se conservó la migración histórica, la persona aplicó la migración de retiro y el change no se archivó como implementado | Sección 6, «T08 — …» |
 | W7 | Ampliación de T07 con desglose de conceptos: explore → propose → corrección del `PUT` → apply por etapas → verify | Diseño corregido antes de implementar por una precondición de la persona; seis etapas con detención al final de cada una, migración aplicada por la persona y verificación sin marcar como ejecutado lo que no corrió | Sección 6, «T07 — ampliación…» |
+| W8 | Integración de la UF (T10): explore → propose → ajustes de la persona → apply por grupos con detención y verificación local entre cada uno | Alcance acotado por etapas; una exploración que fundó decisiones de producto aprobadas por la persona; la IA no marcó como verificado lo que su sandbox no pudo ejecutar (PostgreSQL, findic.cl, navegador) | Sección 6, «T10 — integración de la UF…» |
 
 **W5 en detalle (hechos del desarrollo de T05).** Se pidió explorar T05 sin modificar
 archivos; la IA presentó un plan, la persona **lo rechazó con seis ajustes** (interfaz
@@ -77,6 +78,10 @@ generar los artefactos OpenSpec. Después se implementó, se verificó contra lo
 | **Decisión de producto sobre el alcance**: cancelar T08 (aportes de capital), conservar el gasto como egreso único y ampliar T07 con un desglose opcional | Prompts de retirada de T08 y de ampliación de T07 (sección 6); `docs/product.md` §6.4 |
 | **Protección de datos antes de implementar**: la persona pidió comprobar que el `PUT` no elimine los conceptos cuando se omiten; el diseño aprobado no lo garantizaba, se corrigió y se confirmó la opción A | Prompt de la ampliación de T07 (sección 6); `docs/data-model.md` D16 |
 | **Veracidad de la verificación**: se prohibió marcar como ejecutadas las pruebas que no pudieron correr y las visuales sin abrir la aplicación; la revisión visual del desglose consta como parcial | Prompts de las etapas 4 y 5 del desglose; `docs/work-tickets.md` §4.7 |
+| **Decisiones de producto y de diseño de T10**: proveedor findic.cl, día 1 como referencia, puerto independiente, sin estimar ni reutilizar períodos, `Decimal` en las conversiones; referencia temporal propia de cada equivalente (saldo inicial con `fechaOtorgamiento`, saldo del dashboard con el mes consultado) | Prompts de T10 (sección 6); `docs/work-tickets.md` §4.10 |
+| **Recorte de infraestructura sin consumidores**: la persona pidió no implementar `UfNoDisponibleError` ni el 503; el criterio AC4 quedó documentado, no implementado | Prompt de ajuste de T10; `docs/architecture.md` §12.4 |
+| **Control de latencia con el proveedor caído**: la persona fijó el máximo de 6 llamadas simultáneas y aprobó, con reglas explícitas, un corte anticipado tras 6 fallos consecutivos (la serie vacía no cuenta como fallo) | Prompts de los grupos 6 de T10; `docs/architecture.md` §12.3 |
+| **Veracidad de la verificación de T10**: la persona exigió no afirmar ejecuciones sin evidencia del contador `skipped`, no asumir que una fecha futura carece de UF sin comprobar la respuesta real del proveedor, y registrar como salvedad que el crédito sin `fechaOtorgamiento` no se comprobó visualmente | Prompts de los grupos 7 a 9 de T10; `docs/work-tickets.md` §4.10 |
 
 ---
 
@@ -546,6 +551,50 @@ en el change `t07-desglose-movimientos`):
 | T09 contabiliza solo el total del padre, sin leer ni sumar conceptos | Decisión de la persona (T09 sin cambios); pruebas escritas por la IA y ejecutadas por la persona | `tests/dashboard/dashboard-sin-conceptos.test.ts` y pruebas de T09 |
 | Migraciones: la IA genera el SQL sin conexión; la persona lo revisa y lo aplica | Decisión de la persona | Prompts de T08 y de la etapa 1 del desglose |
 | Verificación: pruebas ejecutadas localmente por la persona; revisión visual parcial | Declarado por la persona | `docs/work-tickets.md` §4.7 |
+
+
+**T10 — integración de la UF (change `t10-integracion-uf`):**
+
+*Resumen del recorrido.* La persona pidió una exploración de solo lectura de T10; la IA revisó el
+ticket y la documentación, el uso de UF y CLP en propiedades, créditos, registro mensual y
+dashboard, comparó proveedores de la UF (recomendó mindicador.cl) y propuso una arquitectura
+mínima. La persona **eligió otro proveedor**, findic.cl, verificado por ella con respuestas
+reales (incluida una `serie: []`), y aprobó las decisiones de diseño, y se generó el change (proposal, design, specs y
+tasks, validado en modo estricto). Antes de implementar, la persona ajustó tres puntos: la
+referencia temporal de cada equivalente (saldo inicial con `fechaOtorgamiento`, comprobada
+antes en el modelo real), la retirada del error 503 por no tener consumidores y la conversión
+a `Decimal` de un `valor` que llega como número JSON. El apply se hizo por grupos de tareas,
+deteniéndose al final de cada uno: modelo y migración (la IA la escribió sin ejecutarla; la
+persona la aplicó en `realtytrack_test` y después en desarrollo), cliente y servicio de UF,
+conversión, crédito, registro mensual, dashboard, verificación y documentación. Durante el
+proceso la persona corrigió la presentación (referencias de UF centralizadas en una sección
+en vez de repetirlas en cada monto), pidió limitar la concurrencia y aprobó un corte
+anticipado para el proveedor caído, y detectó que la ficha de propiedad no debía esperar a la
+UF, lo que llevó a métodos específicos con equivalentes. La sandbox de la IA no alcanzaba
+PostgreSQL, findic.cl ni el navegador: la IA no marcó como ejecutado lo que no pudo correr, y
+la persona ejecutó localmente las pruebas, el build, la verificación del proveedor real y la
+revisión visual. Queda como salvedad que el crédito sin `fechaOtorgamiento` tiene cobertura
+automatizada pero no se comprobó visualmente.
+
+> «Mantener un puerto ProveedorUf independiente del proveedor HTTP.» · «Usar el día 1 del mes como referencia para cada período.» · «No sobrescribir valores ya almacenados.» · «No estimar, interpolar ni reutilizar valores de otros períodos.» · «Usar Decimal para las conversiones monetarias.»
+>
+> «No implementar `UfNoDisponibleError` ni infraestructura sin consumidores actuales, salvo que identifiques un caso real que lo requiera.» · «Validar con Zod que sea positivo, finito y compatible con dos decimales.» · «Evitar operaciones monetarias con number.»
+>
+> «Limitar a un máximo de seis llamadas HTTP simultáneas a findic.cl dentro del servicio UF.» · «no agregues mecanismos complejos sin aprobación» (a propósito de la latencia con el proveedor caído; la persona aprobó después un corte anticipado con reglas explícitas) · «No afirmar que se ejecutaron sin omisiones si no existe evidencia del contador `skipped`.» · «Registrar explícitamente esta limitación; no presentarlo como una prueba visual ejecutada.»
+
+*Decisiones técnicas registradas* (el detalle vive en `docs/work-tickets.md` §4.10,
+`docs/architecture.md` §12 y `docs/data-model.md` §4.12, §8.4 y D17):
+
+| Decisión | Origen | Evidencia |
+|---|---|---|
+| Proveedor findic.cl tras el puerto `ProveedorUf`; sin API key | Decisión de la persona: la IA había recomendado mindicador.cl; la persona eligió findic.cl tras verificar sus respuestas reales | `server/uf/findic.ts`; `docs/architecture.md` §12.1 |
+| Día 1 como referencia del período, en un único punto del código | Decisión de la persona | `server/uf/uf-service.ts` (`fechaReferenciaPeriodo`); `docs/data-model.md` §8.4, D17 |
+| Persistencia idempotente más relectura; sin sobrescribir | Requisito de la persona; mecanismo propuesto por la IA | `tests/uf/uf-service.integration.test.ts` |
+| Período de cada equivalente: cuota → mes actual; saldo inicial → `fechaOtorgamiento`; registro mensual → su período; dashboard → mes consultado | Decisión de la persona | `docs/architecture.md` §12.5; pruebas de integración de los grupos 5 a 7 |
+| Dashboard con métodos específicos para equivalentes; la ficha de propiedad no consulta la UF | La persona identificó el riesgo; la IA lo resolvió | `tests/dashboard/dashboard-uf-consumidores.test.ts` |
+| Máximo de 6 llamadas y corte anticipado tras 6 fallos consecutivos | Reglas de la persona; implementación y pruebas de la IA | `tests/uf/uf-service.concurrencia.test.ts`; `docs/architecture.md` §12.3 |
+| Sin error 503 en T10 (AC4 documentado, no implementado) | Decisión de la persona | `docs/architecture.md` §12.4, §17 |
+| Verificación: pruebas, build, proveedor real y revisión visual ejecutadas por la persona; una salvedad visual | Declarado por la persona | `docs/work-tickets.md` §4.10 |
 
 ---
 

@@ -690,8 +690,10 @@ Implementado y verificado: suite completa, build y revisión manual (ver abajo);
   `monto_clp`, que en un gasto desglosado ya es la suma de sus conceptos; no lee ni suma los
   conceptos (sin `include` ni JOIN con `movimiento_concepto`). Sus fórmulas, DTO y consultas
   no cambiaron; solo se añadieron pruebas.
-- *Dependencias futuras, no incluidas:* equivalente en CLP del saldo en UF y AC4 (**T10**).
-  La interfaz no muestra cifras ni ceros para ellos. T08 (aportes de capital) se canceló: el
+- *Dependencias futuras (resueltas después por T10):* el equivalente en CLP del saldo en UF se
+  añadió con T10 sin cambiar estas fórmulas (métodos `resumenMensualConEquivalentes` y
+  `resumenPropiedadConEquivalentes`, §4.10). AC4 sigue sin implementarse. Hasta T10 la
+  interfaz no mostraba cifras ni ceros para ellos. T08 (aportes de capital) se canceló: el
   flujo neto es simplemente ingresos menos egresos.
 - *Verificación (resultados reales):* TypeScript y lint sin errores y `openspec validate`
   válido (ejecutados en la sesión de desarrollo). El usuario confirmó desde su terminal local
@@ -733,19 +735,17 @@ infraestructura consumida por HU01 (E6) y HU03 (E9), no una historia en sí mism
 - Puerto `ProveedorUf`: obtener el valor de la UF para una fecha concreta.
 - Tabla `valor_uf_periodo`: un valor por período, con `fecha_valor`, `fuente` y momento de
   obtención; no se sobrescribe una vez almacenado.
-- Degradación parcial cuando la UF solo aporta un equivalente opcional; error explícito
-  cuando el resultado principal de la operación depende de la UF ausente.
+- Degradación parcial cuando la UF solo aporta un equivalente opcional (implementada);
+  error explícito cuando el resultado principal de la operación depende de la UF ausente
+  (criterio AC4, **no implementado**: ninguna operación actual lo necesita).
 
-**Dos decisiones que este ticket deja explícitamente abiertas, y no debe cerrar por su
-cuenta:**
-1. **Proveedor o API pública concreta.** *Propuesta a validar* en `architecture.md` §12.1
-   y §21.3 (V2). El puerto existe precisamente para que la implementación sea
-   intercambiable sin tocar a quien lo consume.
-2. **Política del día o valor representativo de `valor_uf_periodo`.** *Propuesta a
-   validar* en `data-model.md` §8.4: día 1 del período, último día del mes, o el día del
-   hecho convertido. Afecta directamente al resultado financiero, así que este ticket la
-   deja como parámetro configurable de la implementación (`architecture.md` §12.5), no
-   como una decisión tomada aquí.
+**Dos decisiones que el ticket dejaba abiertas, ya cerradas al implementarlo:**
+1. **Proveedor: findic.cl** (`GET https://findic.cl/api/uf/{dd-mm-yyyy}`), sin API key. El
+   puerto `ProveedorUf` se mantiene independiente del proveedor HTTP, de modo que sustituirlo
+   no obliga a tocar a quien lo consume (`architecture.md` §12.1, V2).
+2. **Política del día: día 1 del período**, definida en un único punto del código
+   (`fechaReferenciaPeriodo`, `architecture.md` §12.5, V3; `data-model.md` §8.4, D17). Las
+   otras dos opciones siguen descartadas por no haber sido elegidas, no por inviables.
 
 **Criterios de aceptación** (derivados de `product.md` y `data-model.md`; no existe un
 escenario Gherkin dedicado a esta capacidad en `user-stories.md`):
@@ -762,13 +762,13 @@ escenario Gherkin dedicado a esta capacidad en `user-stories.md`):
 - `server/uf/` — puerto `ProveedorUf` e implementación concreta (`architecture.md`
   §12.1).
 - Persistencia: tabla `valor_uf_periodo`, PK `periodo`.
-- Tratamiento de errores: 503 reservado a AC4, nunca a AC3 (`architecture.md` §17).
+- Tratamiento de errores: AC3 degrada a equivalente `null`; el 503 de AC4 sigue reservado
+  (`architecture.md` §17) y no está implementado.
 
-**Dependencias:** ninguna. Es infraestructura que T02 y T09 consumen.
+**Dependencias:** ninguna. Es infraestructura que T02, T03 y T09 consumen.
 
-**Fuera de alcance:** elegir el proveedor concreto y la política del día representativo
-(son las dos decisiones abiertas de este mismo ticket); cualquier cálculo o estimación de
-la UF.
+**Fuera de alcance:** cualquier cálculo o estimación de la UF; una serie diaria de UF; la
+UF «del día del hecho»; precarga programada.
 
 **Estrategia de pruebas:**
 - Unitario: dado un valor ya almacenado, una segunda obtención no lo modifica aunque el
@@ -776,6 +776,69 @@ la UF.
 - Unitario: la ausencia de valor produce degradación parcial o error según el caso, nunca
   una estimación.
 - Integración: persistencia real de `fecha_valor`, `fuente` y momento de obtención.
+
+**Estado de implementación (T10, cambio OpenSpec `t10-integracion-uf`).**
+Implementado y verificado: suite completa, build, verificación contra findic.cl real y
+revisión visual (ver abajo), con **una salvedad** documentada. Una migración, sin cambios en
+tablas existentes.
+- *Proveedor:* `server/uf/findic.ts` consulta `GET {UF_API_BASE_URL}/{dd-mm-yyyy}` (variable
+  opcional; por defecto `https://findic.cl/api/uf`) con `fetch` nativo, timeout de 5 s y sin
+  caché de Next. Valida con Zod: estado 2xx, JSON, `serie` de un solo elemento, `fecha` igual
+  a la solicitada y `valor` numérico finito y positivo; lo convierte de inmediato a
+  `Prisma.Decimal` y exige a lo sumo 2 decimales y rango de `NUMERIC(12,2)`. `serie: []` es
+  *sin datos* (ausencia legítima); error HTTP, timeout, JSON inválido o valor inválido son
+  *error*. El puerto devuelve el resultado, no lanza.
+- *Persistencia:* tabla `valor_uf_periodo` (migración `20261118120000_add_valor_uf_periodo`,
+  `CHECK` de valor > 0 y de período día 1). Inserción idempotente (`createMany` con
+  `skipDuplicates`) seguida de relectura: un valor almacenado no se sobrescribe, tampoco
+  ante consultas concurrentes. No se persisten errores ni respuestas vacías.
+- *Servicio (`server/uf/uf-service.ts`):* lee primero PostgreSQL y consulta al proveedor solo
+  los períodos sin valor, deduplicados y agrupados. **Máximo 6 llamadas HTTP simultáneas** y
+  **corte anticipado** dentro de cada invocación: tras 6 fallos consecutivos (error,
+  timeout, excepción o respuesta inconsistente) deja de iniciar consultas; las ya iniciadas
+  terminan y sus valores válidos se conservan. Una respuesta válida o una serie vacía
+  reinician el contador; la serie vacía nunca cuenta como fallo. Sin estado entre solicitudes.
+  Los períodos no consultados quedan sin equivalente, nunca estimados.
+- *Conversión:* `convertirUfAClp` (sin cambios) sobre `Decimal`; el equivalente es
+  `{ valorClp, ufClp, fechaReferencia }` o `null` (`server/uf/equivalente.ts`), calculado en
+  el servidor, sin redondear ni persistir; el redondeo a entero es solo de presentación.
+- *Período de referencia de cada equivalente:* cuota contractual → mes actual; saldo inicial →
+  mes de `fecha_otorgamiento` (si es `null`, equivalente `null` y la interfaz indica «Sin
+  fecha de otorgamiento»); último saldo registrado y saldo del registro mensual → su propio
+  período; saldo del dashboard → **mes consultado**, conservando el período original del
+  saldo (puede ser anterior).
+- *Contratos:* campos nuevos opcionales, sin cambiar ni renombrar los existentes.
+  `GET /api/propiedades/{id}/credito` añade `cuotaContractualClp`, `saldoInicialClp` y
+  `ultimoSaldo`; los GET del registro mensual añaden `equivalenteClp`; `GET /api/dashboard` y
+  `GET /api/propiedades/{id}/resumen-mensual` añaden `saldoCredito.equivalenteClp`. Los
+  métodos originales de los servicios (incluidos `resumenMensual` y `resumenPropiedad`, que usa
+  la ficha de propiedad) no consultan la UF.
+- *Degradación:* con UF no disponible o proveedor caído, la operación principal responde 200 y
+  el equivalente es `null` («No disponible»). No se implementó `UfNoDisponibleError` ni el
+  503 de AC4: ningún flujo actual depende de la UF para su resultado principal. AC4 es un
+  criterio **condicional** (aplica a una operación cuyo resultado principal dependa de la UF);
+  T10 no entrega ninguna, de modo que no se ejerce y no hay comportamiento que verificar. Se
+  conserva como regla para futuras operaciones (`architecture.md` §12.4, §17).
+- *Cálculos financieros intactos (T07, T09):* el equivalente se calcula después de los totales
+  y no entra en ninguna suma; ingresos, dividendos, otros egresos, flujo neto, estados de pago
+  y el conteo único de un gasto desglosado no cambiaron.
+- *Interfaz:* crédito con la sección «Valores de UF utilizados» (cada referencia una sola
+  vez); registro mensual con el equivalente y su referencia bajo cada saldo; dashboard con el
+  equivalente bajo cada saldo y una única referencia bajo la tabla.
+- *Pruebas automatizadas:* unitarias del cliente (con `fetch` simulado), de la política del
+  día, del equivalente y de su formato, de la concurrencia máxima y del corte anticipado;
+  de integración con PostgreSQL de pruebas para el servicio de UF, el crédito, el registro
+  mensual y el dashboard (UF disponible, sin datos, proveedor caído, valor ya almacenado,
+  histórico estable, contratos anteriores y cálculos financieros idénticos con y sin UF).
+- *Verificación (resultados reales, ejecutados por el usuario en su entorno local):*
+  `npm test` con 352 pruebas, 0 fallidas y 0 omitidas; TypeScript y ESLint sin errores;
+  `npm run build` correcto; `GET /api/uf/01-03-2026` devuelve 39796.31 y `01-01-2030` devuelve
+  `serie: []`, y `createFindicProveedor` devolvió `ok` y `sin-datos` respectivamente, sin
+  persistir datos. Revisión visual satisfactoria de crédito, registro mensual y dashboard,
+  incluidos el proveedor sin datos, el proveedor inaccesible, la persistencia en
+  `valor_uf_periodo` y los JSON de los tres GET.
+- *Salvedad:* el escenario de crédito **sin `fecha_otorgamiento`** («Sin fecha de
+  otorgamiento») tiene cobertura automatizada pero **no se comprobó visualmente**.
 
 ---
 
@@ -911,7 +974,7 @@ negocio en sí misma — igual que `architecture.md` la trata como un puerto.
 
 ```
 T12 (auth)         — prerrequisito transversal, sin bloquear a nadie
-T10 (UF)           — sin dependencias (dos decisiones internas siguen abiertas)
+T10 (UF)           — sin dependencias (implementado; sus dos decisiones internas están cerradas: findic.cl y día 1)
 
 T01 (propiedades)
  ├─→ T02 (crédito) ──→ T03 (registro mensual) ─────────────┐

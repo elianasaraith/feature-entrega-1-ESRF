@@ -35,6 +35,7 @@ model Propiedad {
   credito     CreditoHipotecario?
   contratos   ContratoArriendo[]
   movimientos MovimientoFinanciero[]
+  documentos  Documento[]
 
   @@map("propiedad")
 }
@@ -61,6 +62,7 @@ model CreditoHipotecario {
 
   propiedad Propiedad                @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
   registros CreditoRegistroMensual[]
+  documentos Documento[]
 
   @@map("credito_hipotecario")
 }
@@ -135,6 +137,7 @@ model ContratoArriendo {
   arrendatario Arrendatario    @relation(fields: [arrendatarioId], references: [id], onDelete: Restrict)
   montos       ContratoMonto[]
   pagos        PagoEsperado[]
+  documentos   Documento[]
 
   @@index([propiedadId, fechaInicio])
   @@index([arrendatarioId])
@@ -192,6 +195,7 @@ model AbonoArriendo {
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   pagoEsperado PagoEsperado @relation(fields: [pagoEsperadoId], references: [id], onDelete: Restrict)
+  documentos   Documento[]
 
   @@index([pagoEsperadoId])
   @@index([fechaRecepcion])
@@ -226,7 +230,8 @@ model MovimientoFinanciero {
   updatedAt   DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   propiedad Propiedad            @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
-  conceptos MovimientoConcepto[]
+  conceptos  MovimientoConcepto[]
+  documentos Documento[]
 
   @@index([propiedadId, fecha])
   @@map("movimiento_financiero")
@@ -265,4 +270,45 @@ model ValorUfPeriodo {
   obtenidoEn DateTime @default(now()) @map("obtenido_en") @db.Timestamptz(6)
 
   @@map("valor_uf_periodo")
+}
+
+enum TipoDocumento {
+  ESCRITURA
+  CONTRATO_HIPOTECARIO
+  CONTRATO_ARRIENDO
+  COMPROBANTE_PAGO
+  FACTURA
+  OTRO
+
+  @@map("tipo_documento")
+}
+
+// Metadata de un archivo en object storage (T11, docs/data-model.md §4.13).
+// PostgreSQL nunca guarda el binario: `storage_key` lo referencia. Todo documento
+// pertenece a una propiedad; los vínculos específicos son opcionales y excluyentes
+// (CHECK en la migración SQL, junto con tamano_bytes > 0). Los vínculos a abono y
+// movimiento, que sí pueden eliminarse, usan ON DELETE SET NULL: el documento
+// sigue localizable desde su propiedad.
+model Documento {
+  id                     String        @id @default(uuid()) @db.Uuid
+  propiedadId            String        @map("propiedad_id") @db.Uuid
+  creditoId              String?       @map("credito_id") @db.Uuid
+  contratoId             String?       @map("contrato_id") @db.Uuid
+  abonoArriendoId        String?       @map("abono_arriendo_id") @db.Uuid
+  movimientoFinancieroId String?       @map("movimiento_financiero_id") @db.Uuid
+  tipo                   TipoDocumento
+  nombreArchivo          String        @map("nombre_archivo")
+  mimeType               String        @map("mime_type")
+  tamanoBytes            BigInt        @map("tamano_bytes")
+  storageKey             String        @unique @map("storage_key")
+  subidoEn               DateTime      @default(now()) @map("subido_en") @db.Timestamptz(6)
+
+  propiedad            Propiedad             @relation(fields: [propiedadId], references: [id], onDelete: Restrict)
+  credito              CreditoHipotecario?   @relation(fields: [creditoId], references: [id], onDelete: SetNull)
+  contrato             ContratoArriendo?     @relation(fields: [contratoId], references: [id], onDelete: SetNull)
+  abonoArriendo        AbonoArriendo?        @relation(fields: [abonoArriendoId], references: [id], onDelete: SetNull)
+  movimientoFinanciero MovimientoFinanciero? @relation(fields: [movimientoFinancieroId], references: [id], onDelete: SetNull)
+
+  @@index([propiedadId, subidoEn])
+  @@map("documento")
 }

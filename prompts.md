@@ -596,6 +596,16 @@ automatizada pero no se comprobó visualmente.
 | Sin error 503 en T10 (AC4 documentado, no implementado) | Decisión de la persona | `docs/architecture.md` §12.4, §17 |
 | Verificación: pruebas, build, proveedor real y revisión visual ejecutadas por la persona; una salvedad visual | Declarado por la persona | `docs/work-tickets.md` §4.10 |
 
+**Cierre funcional (dashboard histórico, edición de arrendatarios, corrección de montos y documentos
+T11).** Cuatro changes de OpenSpec propuestos, implementados, verificados y archivados con revisión
+humana de las decisiones de negocio. Decisiones de la persona: bloquear con 422 todo cambio de monto
+que afecte pagos con abonos (incluido el alta de reajustes), sin ajustes compensatorios;
+Cloudflare R2, PDF/JPEG/PNG/WebP y 20 MB para documentos; sin dependencias nuevas. Aporte de la IA:
+firma SigV4 con `node:crypto` verificada con el vector oficial de AWS y una revisión de seguridad que
+añadió un token de subida emitido por el servidor y la validación del objeto real. La IA no pudo
+ejecutar pruebas de integración, build ni R2 en su entorno; la persona los ejecutó localmente y
+validó manualmente la interfaz y R2.
+
 ---
 
 ### 7. Pull Requests

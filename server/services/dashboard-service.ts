@@ -4,11 +4,15 @@ import type { EstadoPago } from "@/server/domain/pago-estado";
 import { rangoDelMes } from "@/server/domain/movimiento-agregacion";
 import {
   type ActividadEntrada,
+  type EstadoConsolidado,
+  estadoConsolidado,
   flujoNeto,
+  mesesHasta,
   ordenarActividad,
   seleccionarSaldoAplicable,
   sumarMontos,
 } from "@/server/domain/dashboard";
+import { sumarUf } from "@/server/domain/uf";
 import { calcularEquivalenteClp } from "@/server/uf/equivalente";
 import type { EquivalenteClpDto } from "@/server/uf/equivalente";
 import type { UfService, ValorUfDto } from "@/server/uf/uf-service";
@@ -50,9 +54,22 @@ type ConSaldoEquivalente<T extends { saldoCredito: SaldoCreditoDto | null }> = O
   saldoCredito: SaldoCreditoConEquivalenteDto | null;
 };
 export type PropiedadResumenConEquivalenteDto = ConSaldoEquivalente<PropiedadResumenDto>;
+// Saldo hipotecario de la cartera: suma exacta en UF de los últimos saldos
+// aplicables y su equivalente en CLP (UF del mes consultado). `creditos.sinSaldo`
+// son créditos vigentes sin saldo conocido: nunca aportan 0 al total.
+export type SaldoConsolidadoDto = {
+  totalUf: string | null;
+  creditos: { total: number; conSaldo: number; sinSaldo: number };
+  estado: EstadoConsolidado;
+  equivalenteClp: EquivalenteClpDto;
+};
 export type ResumenMensualConEquivalentesDto = Omit<ResumenMensualDto, "propiedades"> & {
   propiedades: PropiedadResumenConEquivalenteDto[];
+  saldoConsolidado: SaldoConsolidadoDto;
 };
+
+export type PeriodoHistoricoDto = TotalesDto & { mes: string };
+export type HistoricoMensualDto = { mes: string; meses: number; periodos: PeriodoHistoricoDto[] };
 export type ResumenPropiedadConEquivalenteDto = ConSaldoEquivalente<ResumenPropiedadDto>;
 
 export type ActividadDto = ActividadEntrada & { propiedadId: string; href: string };
@@ -293,13 +310,71 @@ export function createDashboardService(prisma: PrismaClient, uf?: UfService) {
       };
     },
 
-    // Mismos cálculos que resumenMensual (se reutiliza tal cual) + equivalente del saldo.
+    // Mismos cálculos que resumenMensual (se reutiliza tal cual) + equivalente del
+    // saldo + consolidado. La UF del mes se resuelve una sola vez para ambos.
     async resumenMensualConEquivalentes(mes: string, hoy: string): Promise<ResumenMensualConEquivalentesDto> {
       const base = await this.resumenMensual(mes, hoy);
-      const valorUf = await ufDelMes(mes, base.propiedades.some((p) => p.saldoCredito !== null));
+      const conSaldo = base.propiedades.filter((p) => p.saldoCredito !== null);
+      const valorUf = await ufDelMes(mes, conSaldo.length > 0);
+
+      // Universo de créditos: los de la cartera ya otorgados al cierre del mes
+      // consultado (fecha de otorgamiento desconocida = vigente), más cualquiera
+      // con saldo aplicable. Un crédito aún no otorgado no cuenta como "sin saldo".
+      const { hasta } = rangoDelMes(mes);
+      const creditos = await prisma.creditoHipotecario.findMany({
+        where: {
+          propiedadId: { in: base.propiedades.map((p) => p.propiedadId) },
+          OR: [{ fechaOtorgamiento: null }, { fechaOtorgamiento: { lt: aFecha(hasta) } }],
+        },
+        select: { propiedadId: true },
+      });
+      const universo = new Set(creditos.map((c) => c.propiedadId));
+      for (const p of conSaldo) universo.add(p.propiedadId);
+
+      const totalUf = conSaldo.length > 0 ? sumarUf(conSaldo.map((p) => (p.saldoCredito as SaldoCreditoDto).saldoPendienteUf)) : null;
       return {
         ...base,
         propiedades: base.propiedades.map((p) => ({ ...p, saldoCredito: conEquivalente(p.saldoCredito, valorUf) })),
+        saldoConsolidado: {
+          totalUf,
+          creditos: { total: universo.size, conSaldo: conSaldo.length, sinSaldo: universo.size - conSaldo.length },
+          estado: estadoConsolidado(conSaldo.length, universo.size),
+          equivalenteClp: calcularEquivalenteClp(totalUf, valorUf),
+        },
+      };
+    },
+
+    // Totales de caja de los `meses` meses que terminan en `mesFin`. Tres consultas
+    // por rango, agrupadas por mes con la misma `totales()` del dashboard mensual.
+    // No consulta la UF.
+    async historico(mesFin: string, meses: number): Promise<HistoricoMensualDto> {
+      const lista = mesesHasta(mesFin, meses);
+      const rango = { gte: aFecha(rangoDelMes(lista[0]).desde), lt: aFecha(rangoDelMes(mesFin).hasta) };
+      const [abonos, dividendos, movimientos] = await Promise.all([
+        prisma.abonoArriendo.findMany({ where: { fechaRecepcion: rango }, select: { fechaRecepcion: true, montoClp: true } }),
+        prisma.creditoRegistroMensual.findMany({
+          where: { fechaPagoDividendo: rango, dividendoPagadoClp: { not: null } },
+          select: { fechaPagoDividendo: true, dividendoPagadoClp: true },
+        }),
+        prisma.movimientoFinanciero.findMany({ where: { fecha: rango }, select: { fecha: true, montoClp: true } }),
+      ]);
+      const porMes = new Map<string, { ingresos: string[]; dividendos: string[]; otros: string[] }>(
+        lista.map((m) => [m, { ingresos: [], dividendos: [], otros: [] }])
+      );
+      const poner = (fecha: Date | null, monto: { toString(): string } | null, clave: "ingresos" | "dividendos" | "otros") => {
+        if (!fecha || monto === null) return;
+        porMes.get(isoDate(fecha).slice(0, 7))?.[clave].push(monto.toString());
+      };
+      for (const a of abonos) poner(a.fechaRecepcion, a.montoClp, "ingresos");
+      for (const d of dividendos) poner(d.fechaPagoDividendo, d.dividendoPagadoClp, "dividendos");
+      for (const m of movimientos) poner(m.fecha, m.montoClp, "otros");
+      return {
+        mes: mesFin,
+        meses,
+        periodos: lista.map((m) => {
+          const f = porMes.get(m) as { ingresos: string[]; dividendos: string[]; otros: string[] };
+          return { mes: m, ...totales(f.ingresos, f.dividendos, f.otros) };
+        }),
       };
     },
 

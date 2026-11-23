@@ -23,6 +23,14 @@ export class UnprocessableError extends Error {
   }
 }
 
+// Dependencia externa no disponible o no configurada (HTTP 503).
+export class ServiceUnavailableError extends Error {
+  constructor(message = "Servicio no disponible") {
+    super(message);
+    this.name = "ServiceUnavailableError";
+  }
+}
+
 // Único punto de traducción de errores a HTTP (architecture.md §17).
 export function toHttpResponse(error: unknown): Response {
   if (error instanceof ZodError) {
@@ -41,6 +49,9 @@ export function toHttpResponse(error: unknown): Response {
   }
   if (error instanceof UnprocessableError) {
     return Response.json({ error: error.message }, { status: 422 });
+  }
+  if (error instanceof ServiceUnavailableError) {
+    return Response.json({ error: error.message }, { status: 503 });
   }
   console.error(error);
   return Response.json({ error: "Error interno" }, { status: 500 });

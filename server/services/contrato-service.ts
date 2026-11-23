@@ -4,12 +4,14 @@ import {
   fechaEsperada,
   montoVigenteEn,
   periodoDe,
+  pagosQueCambian,
   periodosEntre,
 } from "@/server/domain/contrato-monto";
 import { type Vigencia, vigenciaDe } from "@/server/domain/contrato-vigencia";
 import type {
   ContratoActualizarInput,
   ContratoCrearInput,
+  MontoCorregirInput,
   MontoCrearInput,
 } from "@/server/schemas/contrato";
 import {
@@ -54,6 +56,7 @@ export type SincronizacionDto = { creados: number; existentes: number };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIN_CONTRATO = "Contrato no encontrado";
+const SIN_MONTO = "Monto no encontrado";
 
 const include = {
   arrendatario: true,
@@ -148,6 +151,32 @@ export function createContratoService(prisma: PrismaClient) {
     });
     if (!fila) throw new NotFoundError(SIN_CONTRATO);
     return fila;
+  }
+
+  // Pagos esperados (período >= desde) cuyo monto cambiaría con `filasNuevas`.
+  // Si alguno tiene abonos: 422 con los períodos; nada se modifica.
+  async function pagosAfectados(
+    tx: Prisma.TransactionClient,
+    contratoId: string,
+    desde: Date,
+    filasNuevas: MontoDto[]
+  ) {
+    const pagos = await tx.pagoEsperado.findMany({
+      where: { contratoId, periodo: { gte: desde } },
+      include: { abonos: { select: { id: true } } },
+    });
+    const cambian = pagosQueCambian(
+      filasNuevas,
+      pagos.map((p) => ({ id: p.id, periodo: isoDate(p.periodo), montoEsperadoClp: p.montoEsperadoClp.toString() }))
+    );
+    const conAbonos = cambian.filter((c) => pagos.find((p) => p.id === c.id)?.abonos.length);
+    if (conAbonos.length > 0) {
+      const periodos = conAbonos.map((c) => c.periodo.slice(0, 7)).join(", ");
+      throw new UnprocessableError(
+        `No se puede modificar el monto: hay pagos esperados con abonos registrados en los períodos ${periodos}`
+      );
+    }
+    return cambian;
   }
 
   return {
@@ -301,7 +330,8 @@ export function createContratoService(prisma: PrismaClient) {
 
     // Primer monto o reajuste: agrega una fila y nunca altera las anteriores.
     // Los pagos esperados ya existentes desde ese período se actualizan al monto
-    // que les corresponde; no se crea ninguno (eso es sincronizarPagos).
+    // que les corresponde, salvo que alguno que cambiaría tenga abonos: entonces
+    // 422 sin cambios. No se crea ningún pago (eso es sincronizarPagos).
     async registrarMonto(
       propiedadId: string,
       contratoId: string,
@@ -328,6 +358,22 @@ export function createContratoService(prisma: PrismaClient) {
           }
         }
 
+        // Misma protección que corregir/eliminar: si el nuevo monto cambiaría pagos
+        // esperados con abonos, 422 antes de escribir nada. Los pagos cuyo monto no
+        // cambia (aunque tengan abonos) no se bloquean. Todo bajo el bloqueo por
+        // propiedad que también toma el registro de abonos.
+        const candidata: MontoDto = {
+          id: "",
+          montoMensualClp: input.montoMensualClp,
+          vigenteDesdePeriodo: periodo,
+          motivo: null,
+          createdAt: "",
+        };
+        const cambian = await pagosAfectados(tx, contratoId, fechaADate(periodo), [
+          ...previas.map(toMontoDto),
+          candidata,
+        ]);
+
         const creada = await tx.contratoMonto.create({
           data: {
             contratoId,
@@ -336,22 +382,68 @@ export function createContratoService(prisma: PrismaClient) {
             motivo: input.motivo ?? (previas.length === 0 ? "monto inicial" : "reajuste"),
           },
         });
-
-        const filas = [...previas, creada].map(toMontoDto);
-        const pagos = await tx.pagoEsperado.findMany({
-          where: { contratoId, periodo: { gte: fechaADate(periodo) } },
-        });
-        for (const pago of pagos) {
-          const monto = montoVigenteEn(filas, isoDate(pago.periodo));
-          // Solo se toca (y cambia updated_at) si el monto realmente cambia.
-          if (monto !== null && monto !== pago.montoEsperadoClp.toString()) {
-            await tx.pagoEsperado.update({
-              where: { id: pago.id },
-              data: { montoEsperadoClp: monto },
-            });
-          }
+        // Solo se toca (y cambia updated_at) el pago cuyo monto realmente cambia.
+        for (const c of cambian) {
+          await tx.pagoEsperado.update({ where: { id: c.id }, data: { montoEsperadoClp: c.montoNuevo } });
         }
         return toMontoDto(creada);
+      });
+    },
+
+    // Corrige monto/motivo de una fila de contrato_monto. Solo procede si ningún
+    // pago esperado cuyo monto cambiaría tiene abonos (si no, 422 y no se toca
+    // nada); los abonos nunca se modifican. El período de vigencia no se edita.
+    async corregirMonto(
+      propiedadId: string,
+      contratoId: string,
+      montoId: string,
+      input: MontoCorregirInput
+    ): Promise<{ monto: MontoDto; pagosActualizados: number }> {
+      await asegurarPropiedad(prisma, propiedadId);
+      return conBloqueoDePropiedad(propiedadId, async (tx) => {
+        await obtenerFila(tx, propiedadId, contratoId);
+        const filas = await tx.contratoMonto.findMany({ where: { contratoId } });
+        const fila = UUID.test(montoId) ? filas.find((f) => f.id === montoId) : undefined;
+        if (!fila) throw new NotFoundError(SIN_MONTO);
+        const nuevas = filas.map((f) =>
+          f.id === fila.id ? { ...toMontoDto(f), montoMensualClp: input.montoMensualClp } : toMontoDto(f)
+        );
+        const cambian = await pagosAfectados(tx, contratoId, fila.vigenteDesdePeriodo, nuevas);
+        const actualizada = await tx.contratoMonto.update({
+          where: { id: fila.id },
+          data: { montoMensualClp: input.montoMensualClp, ...(input.motivo ? { motivo: input.motivo } : {}) },
+        });
+        for (const c of cambian) {
+          await tx.pagoEsperado.update({ where: { id: c.id }, data: { montoEsperadoClp: c.montoNuevo } });
+        }
+        return { monto: toMontoDto(actualizada), pagosActualizados: cambian.length };
+      });
+    },
+
+    // Elimina un reajuste (nunca el monto inicial) bajo la misma condición de
+    // abonos; los pagos afectados vuelven al monto de la fila anterior vigente.
+    async eliminarMonto(
+      propiedadId: string,
+      contratoId: string,
+      montoId: string
+    ): Promise<{ eliminado: true; pagosActualizados: number }> {
+      await asegurarPropiedad(prisma, propiedadId);
+      return conBloqueoDePropiedad(propiedadId, async (tx) => {
+        await obtenerFila(tx, propiedadId, contratoId);
+        const filas = await tx.contratoMonto.findMany({ where: { contratoId } });
+        const fila = UUID.test(montoId) ? filas.find((f) => f.id === montoId) : undefined;
+        if (!fila) throw new NotFoundError(SIN_MONTO);
+        const inicial = filas.reduce((a, b) => (b.vigenteDesdePeriodo < a.vigenteDesdePeriodo ? b : a));
+        if (inicial.id === fila.id) {
+          throw new UnprocessableError("El monto inicial no se puede eliminar; corríjalo en su lugar");
+        }
+        const nuevas = filas.filter((f) => f.id !== fila.id).map(toMontoDto);
+        const cambian = await pagosAfectados(tx, contratoId, fila.vigenteDesdePeriodo, nuevas);
+        await tx.contratoMonto.delete({ where: { id: fila.id } });
+        for (const c of cambian) {
+          await tx.pagoEsperado.update({ where: { id: c.id }, data: { montoEsperadoClp: c.montoNuevo } });
+        }
+        return { eliminado: true as const, pagosActualizados: cambian.length };
       });
     },
 

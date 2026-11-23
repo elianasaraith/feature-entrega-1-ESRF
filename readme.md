@@ -24,8 +24,8 @@
 > también está implementada: valores históricos de findic.cl conservados por período y
 > equivalentes en CLP en el crédito, su registro mensual y el dashboard (ver «Estado funcional» y
 > `docs/work-tickets.md` §4.10). **El MVP no está terminado**:
-> siguen pendientes, entre otros, los documentos (T11), además del
-> despliegue. El ticket de aportes de capital (T08) se canceló por decisión de producto. Lo que describen las secciones para esas capacidades es diseño propuesto; cada
+> siguen pendientes, entre otros, el rediseño del frontend, las pruebas E2E, las verificaciones
+> de seguridad y el despliegue (T11, documentos, está implementado y validado contra Cloudflare R2). El ticket de aportes de capital (T08) se canceló por decisión de producto. Lo que describen las secciones para esas capacidades es diseño propuesto; cada
 > sección distingue lo implementado de lo propuesto. El detalle técnico completo vive en
 > `docs/`; este documento lo resume e integra, sin duplicarlo.
 
@@ -122,7 +122,7 @@ crédito hipotecario con su registro mensual, contratos y montos de arriendo
 funcionamiento está en el video [`realtytrack-entrega2.mp4`](realtytrack-entrega2.mp4);
 este documento no incluye capturas. También están implementadas las vistas de abonos
 (pagos del contrato), de movimientos financieros —con registro simple o desglosado en
-conceptos— y del dashboard; la vista de documentos sigue *pendiente*. El siguiente diagrama resume el **flujo de navegación previsto** (los
+conceptos— y del dashboard; la vista de documentos (`/propiedades/[id]/documentos`) está implementada. El siguiente diagrama resume el **flujo de navegación previsto** (los
 nodos `app/dashboard` y `app/contratos` son diseño; en la aplicación actual los
 contratos viven bajo `app/propiedades/[id]/contratos`), construido a partir de las
 vistas definidas en
@@ -177,7 +177,8 @@ Variables que usa el código: `DATABASE_URL` y `DIRECT_URL` (conexión a Postgre
 Prisma las lee de `.env`), `SEED_USER_EMAIL` y `SEED_USER_PASSWORD` (credenciales del
 usuario único que crean los seeds), el secreto de sesión de Auth.js (`AUTH_SECRET`,
 estándar de Auth.js v5; confirma su nombre en `.env.example`) y, solo para las pruebas
-de integración, `TEST_DATABASE_URL`. Opcionalmente `UF_API_BASE_URL` (endpoint de la API de
+de integración, `TEST_DATABASE_URL`. Para documentos, las cinco variables `S3_*` descritas en «Configuración de
+documentos». Opcionalmente `UF_API_BASE_URL` (endpoint de la API de
 UF; por defecto `https://findic.cl/api/uf`, sin API key). Para la base local de Docker Compose la URL tiene
 la forma `postgresql://realtytrack:<contraseña de docker-compose.yml>@localhost:5436/realtytrack`.
 
@@ -292,7 +293,29 @@ proveedor sin datos y proveedor inaccesible, la persistencia en `valor_uf_period
 de los GET. **Salvedad:** el escenario de crédito sin `fecha_otorgamiento` tiene cobertura
 automatizada, pero **no se comprobó visualmente**. Detalle: `docs/work-tickets.md` §4.10.
 
-**Pendiente del MVP:** documentos (T11) y despliegue.
+**Ampliaciones posteriores (implementadas y verificadas: pruebas automatizadas, build y validación manual):**
+- *Dashboard:* histórico de 6 meses (hasta 12) por `GET /api/dashboard/historico`, saldo
+  hipotecario consolidado (UF, equivalente en CLP, estados completo/parcial/sin saldos) y
+  navegación entre meses; sin gráficos (`docs/work-tickets.md` §4.9).
+- *Arrendatarios:* edición (`PUT /api/arrendatarios/{id}`); sin eliminación.
+- *Montos de arriendo:* corrección y eliminación de reajustes, y alta de reajustes, solo si no
+  cambian pagos con abonos (422 en caso contrario); el escenario con abonos queda pendiente de
+  decisión de negocio (`docs/work-tickets.md` §4.5).
+- *Documentos (T11):* subida directa a un bucket privado S3-compatible (Cloudflare R2), URLs
+  firmadas de 5 minutos, token de subida emitido por el servidor y validación del objeto real
+  (tamaño, `Content-Type`, firma de formato); PDF, JPEG, PNG y WebP, máximo 20 MB. Subida,
+  descarga y eliminación física validadas contra R2 real.
+
+**Configuración de documentos (Cloudflare R2).** Variables de entorno **solo de servidor** (nunca
+`NEXT_PUBLIC_*`): `S3_ENDPOINT` (`https://<cuenta>.r2.cloudflarestorage.com`), `S3_REGION`
+(`auto`), `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`. En R2: bucket **privado** (sin
+acceso público), un token de API S3 con lectura y escritura limitadas a ese bucket y una regla
+CORS que permita `PUT` desde el origen de la aplicación con la cabecera `Content-Type`. Sin
+estas variables la aplicación funciona y las operaciones de documentos responden 503. La
+migración `20261123120000_add_documento` debe aplicarse antes (`npx prisma migrate deploy`).
+
+**Pendiente antes de la entrega final (jueves 26 de noviembre de 2026):** rediseño integral del
+frontend, pruebas E2E, verificaciones de seguridad y despliegue (Vercel y Neon, propuesto).
 
 ---
 
@@ -318,7 +341,7 @@ flowchart TB
 
     PG[("Neon<br/>PostgreSQL")]
     APIUF["API pública de UF<br/>findic.cl"]
-    S3[("Object storage<br/>compatible con S3<br/>proveedor a validar")]
+    S3[("Object storage<br/>compatible con S3<br/>Cloudflare R2")]
 
     Navegador -->|"HTTP · lectura"| UI
     Navegador -->|"HTTP · escritura"| API

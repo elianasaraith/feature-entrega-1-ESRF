@@ -6,9 +6,10 @@ Este documento es el **backlog técnico completo** del MVP: la unidad de trabajo
 diseño ya cerrado (`product.md`, `user-stories.md`, `data-model.md`, `architecture.md`) y
 la implementación.
 
-> **Todo lo descrito aquí es backlog propuesto, no implementado.** Entrega 1 es
-> exclusivamente documental: no hay código de aplicación. Cada ticket describe trabajo
-> por hacer en las entregas siguientes.
+> **Estado.** El backlog es la fuente del trabajo; el estado real de cada ticket está en su
+> bloque «Estado de implementación». T01–T07, T09–T12 están implementados (T08 cancelado);
+> el despliegue en Vercel/Neon sigue siendo propuesta. Lo que un ticket describe sin bloque de
+> estado es diseño.
 
 **Relación con `readme.md` §6.** La plantilla oficial exige documentar allí 3 tickets
 representativos —uno de backend, uno de frontend, uno de base de datos—. Ese límite es
@@ -264,6 +265,12 @@ retención— (fuera de alcance del MVP); documentos del contrato (T11).
 
 ---
 
+**Estado de implementación (T04, ampliación `edicion-arrendatarios`).** Se añadió la
+**edición de arrendatarios**: `GET` y `PUT /api/arrendatarios/{id}` (mismos campos y validación
+que el alta; el `id`, los contratos y el historial no cambian; RUT duplicado → 409). Se edita
+desde la lista de contratos de la propiedad («Editar arrendatario»), sin módulo aparte. **No
+existe eliminación de arrendatarios.**
+
 ### 4.5 T05 — Reajustes de arriendo y generación de pagos esperados
 
 **Tipo:** backend · **Historia de usuario:** HU02
@@ -363,7 +370,9 @@ errores, y revisión manual de la interfaz.
 
 **Comportamiento previsto de los reajustes cuando T06 registre abonos** (diseñado, no
 implementado): el reajuste solo cambia `monto_esperado_clp`; nunca modifica, elimina ni
-reasigna abonos y no se bloquea por su existencia. El estado se deriva al consultar
+reasigna abonos. *Actualización (`gestion-montos-arriendo`):* un reajuste que cambiaría el esperado
+de un pago con abonos se rechaza (422), ver el estado de T05 más abajo; las reglas de estado
+siguientes siguen valiendo para la derivación. El estado se deriva al consultar
 (`data-model.md` §6.1): un pago pagado cuyo esperado sube pasa a *vencido con abonos
 parciales* si su fecha esperada ya pasó (CL12) o a *parcialmente pagado* si no (CL13); si el
 esperado baja, los abonos excedentes se admiten (CL14). T05 no persiste estado, saldo ni
@@ -371,6 +380,15 @@ exceso. Fuera de T05 quedan los abonos y pagos recibidos (T06) y los movimientos
 (T07).
 
 ---
+
+**Estado de implementación (T05, ampliación `gestion-montos-arriendo`).** Corrección y
+eliminación guardada de montos: `PUT` y `DELETE .../montos/{montoId}`. La regla común, aplicada
+también a `registrarMonto` (alta de reajuste): una operación solo procede si **ningún pago
+esperado cuyo monto cambiaría tiene abonos**; si lo tiene, 422 sin cambios parciales. Los pagos
+con abonos cuyo monto no cambia no bloquean; los períodos anteriores a la vigencia de la fila no
+se tocan; el monto inicial no se elimina; los abonos nunca se modifican. Todo se ejecuta bajo el
+bloqueo por propiedad que también toma el registro de abonos. **Pendiente de decisión de negocio:**
+corregir montos de períodos con abonos (p. ej. aplicar solo hacia adelante o ajuste compensatorio).
 
 ### 4.6 T06 — Registro de abonos y estado del pago de arriendo
 
@@ -437,7 +455,7 @@ Implementado y verificado: pruebas automatizadas, migración en pruebas y desarr
   recibido, saldo pendiente, estado, fecha de completitud y las dos calificaciones,
   calculados por la función pura `calcularEstadoPago` con «hoy» de Chile inyectado. Nada
   de eso se persiste; no escribe ni sincroniza.
-- *Reajustes:* conservan los abonos; el estado se deriva sobre el monto esperado vigente.
+- *Reajustes:* conservan los abonos y se rechazan (422) si cambiarían el esperado de un pago con abonos; el estado se deriva sobre el monto esperado vigente.
 - *Interfaz:* `/propiedades/[id]/contratos/[contratoId]/pagos` (listar, registrar, editar
   y eliminar abonos), enlazada desde la lista de contratos y desde montos.
 - *Seed:* no se amplió con abonos (decisión del usuario): el seed no crea contratos ni pagos y queda fuera de T06; no aplicable.
@@ -717,6 +735,14 @@ Implementado y verificado: suite completa, build y revisión manual (ver abajo);
 
 ---
 
+**Ampliación T09 (`dashboard-historico-mensual`).** `GET /api/dashboard/historico?mes&meses`
+(6 meses por defecto, máximo 12; tres consultas por rango y la misma `totales()` del dashboard
+mensual; sin UF). `GET /api/dashboard` añade `saldoConsolidado`: suma exacta en UF de los
+últimos saldos aplicables, equivalente en CLP con la UF del mes consultado y estado
+`COMPLETO`/`PARCIAL`/`SIN_SALDOS` (un crédito sin saldo no cuenta como 0; un crédito aún no
+otorgado en el mes no forma parte del universo). La interfaz suma tabla de histórico, enlaces a
+mes anterior/siguiente y el consolidado, sin gráficos.
+
 ### 4.10 T10 — Integración con la API de UF
 
 **Tipo:** transversal · **Historia de usuario:** ninguna dedicada (ver nota abajo)
@@ -904,6 +930,25 @@ aceptación de HU03 lo ejercita, así que no forma parte de sus AC1–AC3.
 - Integración: localizar todos los documentos de una propiedad con una sola consulta
   (AC3).
 - API: la URL de subida es de vida corta y el bucket no expone objetos públicamente.
+
+**Estado de implementación (T11, cambio OpenSpec `t11-gestion-documentos`).** Implementado y
+validado contra Cloudflare R2 real: subida, descarga y eliminación física (ver README,
+«Configuración de documentos»). Migración `20261123120000_add_documento` (no aplicada en este repositorio).
+- *Puerto y proveedor:* `AlmacenDocumentos` (URL firmada de subida y lectura, inspección, lectura
+  de los primeros bytes, borrado) con implementación S3-compatible (R2 como objetivo) que firma
+  con SigV4 usando solo `node:crypto`, verificada con el vector oficial de AWS. Pruebas con un
+  almacén simulado; sin servicios externos.
+- *Flujo:* `POST .../documentos/subida` (valida tipo, formato y tamaño; devuelve URL PUT de 5 min
+  con `Content-Type` y `Content-Length` firmados, clave `propiedades/{id}/{uuid}` y un
+  `tokenSubida`) → el navegador sube directo al bucket → `POST .../documentos` (exige el token;
+  el servidor comprueba existencia, tamaño, `Content-Type` y firma de formato del objeto real, y
+  descarta el que no cumple) → `GET` (listado y URL de lectura de 5 min) y `DELETE`.
+- *Reglas confirmadas:* PDF, JPEG, PNG y WebP; máximo 20 MB; bucket privado; vínculos a
+  propiedad, crédito, contrato, abono o movimiento, que deben pertenecer a la propiedad.
+- *Inconsistencias:* un objeto huérfano se acepta (`architecture.md` §13.3); sin metadata que
+  apunte a un archivo inexistente; almacenamiento no configurado o caído → 503.
+- *Interfaz:* `/propiedades/{id}/documentos` (lista, subida, descarga, eliminación con
+  confirmación; vínculo a propiedad, crédito o contrato).
 
 ---
 

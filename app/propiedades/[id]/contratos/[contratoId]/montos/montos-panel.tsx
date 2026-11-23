@@ -33,6 +33,30 @@ export function MontosPanel({
   const [enviando, setEnviando] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
   const [resultado, setResultado] = useState<string | null>(null);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [errorFila, setErrorFila] = useState<string | null>(null);
+
+  // Corrección (PUT) o eliminación (DELETE) de una fila. El servidor decide: si hay
+  // abonos en el rango responde 422 y no cambia nada.
+  async function modificarMonto(montoId: string, metodo: "PUT" | "DELETE", monto?: string) {
+    setErrorFila(null);
+    try {
+      const respuesta = await fetch(`${base}/montos/${montoId}`, {
+        method: metodo,
+        headers: { "content-type": "application/json" },
+        body: metodo === "PUT" ? JSON.stringify({ montoMensualClp: monto }) : undefined,
+      });
+      const datos = await respuesta.json().catch(() => null);
+      if (!respuesta.ok) {
+        setErrorFila(datos?.campos?.montoMensualClp?.[0] ?? datos?.error ?? "No se pudo modificar el monto");
+        return;
+      }
+      setEditandoId(null);
+      router.refresh();
+    } catch {
+      setErrorFila("No se pudo modificar el monto");
+    }
+  }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -109,18 +133,63 @@ export function MontosPanel({
                   <th className="py-1">Rige desde</th>
                   <th>Monto (CLP)</th>
                   <th>Motivo</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {montos.map((m) => (
                   <tr key={m.id} className="border-t">
                     <td className="py-1">{m.vigenteDesdePeriodo.slice(0, 7)}</td>
-                    <td>{m.montoMensualClp}</td>
+                    <td>
+                      {editandoId === m.id ? (
+                        <form
+                          className="flex gap-2"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const nuevo = new FormData(e.currentTarget).get("monto");
+                            void modificarMonto(m.id, "PUT", String(nuevo ?? ""));
+                          }}
+                        >
+                          <input name="monto" type="text" inputMode="numeric" defaultValue={m.montoMensualClp} className="w-32 rounded border px-2 py-1" />
+                          <button type="submit" className="underline">
+                            Guardar
+                          </button>
+                          <button type="button" onClick={() => setEditandoId(null)} className="underline">
+                            Cancelar
+                          </button>
+                        </form>
+                      ) : (
+                        m.montoMensualClp
+                      )}
+                    </td>
                     <td>{m.motivo ?? "—"}</td>
+                    <td>
+                      <button type="button" onClick={() => setEditandoId(m.id)} className="underline">
+                        Corregir
+                      </button>
+                      {m !== montos[0] && (
+                        <button
+                          type="button"
+                          className="ml-3 underline"
+                          onClick={() => {
+                            if (window.confirm(`¿Eliminar el reajuste de ${m.vigenteDesdePeriodo.slice(0, 7)}?`)) {
+                              void modificarMonto(m.id, "DELETE");
+                            }
+                          }}
+                        >
+                          Eliminar
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {errorFila && (
+              <p role="alert" className="mt-2 text-sm text-red-600">
+                {errorFila}
+              </p>
+            )}
           </>
         )}
       </section>

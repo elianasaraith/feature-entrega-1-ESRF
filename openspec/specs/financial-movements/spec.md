@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change t07-movimientos-financieros. Update Purpose after archive.
+Esta capability define los movimientos financieros de una propiedad (T07): egresos manuales en CLP con fecha, categoría y descripción opcional, que se registran, consultan, editan y eliminan, con agregación mensual por categoría. Un movimiento es un gasto simple o desglosado en 1 a 50 conceptos con nombre y monto; en ambos casos `monto_clp` es el total, de modo que el dashboard lo cuenta una sola vez. Excluye el dividendo (vive en el registro mensual del crédito) y los aportes de capital, y todo acceso exige sesión.
 ## Requirements
 ### Requirement: Registro de movimiento financiero
 El sistema SHALL permitir registrar, para una propiedad existente, un movimiento financiero (egreso manual) con `fecha`, `categoria`, `descripcion` opcional y un monto en CLP, mediante `POST /api/propiedades/{id}/movimientos`. El gasto SHALL ser **simple** —`montoClp` (entero > 0) y sin `conceptos`— o **desglosado** —`conceptos` con al menos un elemento y `montoClp` opcional—, según «Movimiento desglosado en conceptos». `conceptos` SHALL ser una lista cuando se envía; `conceptos` nulo SHALL ser un error de formato. Un cuerpo sin `conceptos` SHALL comportarse exactamente como antes de este cambio. La `categoria` SHALL ser uno de `REPARACION`, `EQUIPAMIENTO`, `SEGURO`, `CONTRIBUCIONES`, `GASTO_COMUN`, `GASTO_EXTRAORDINARIO` u `OTRO`. El monto SHALL expresarse siempre en CLP.

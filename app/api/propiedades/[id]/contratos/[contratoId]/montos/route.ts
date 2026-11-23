@@ -6,7 +6,7 @@ import { contratoService } from "@/server/services";
 
 type Context = { params: Promise<{ id: string; contratoId: string }> };
 
-// Sin DELETE ni PUT: el histórico de montos solo crece (405).
+// La colección solo admite alta; la corrección y la eliminación guardada van en montos/[montoId].
 export async function GET(_request: Request, { params }: Context) {
   const session = await requireSession();
   if (session instanceof Response) return session;

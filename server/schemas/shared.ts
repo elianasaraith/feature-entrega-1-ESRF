@@ -108,3 +108,7 @@ export const vacioANull = <T extends z.ZodType>(schema: T) =>
     .union([z.null(), z.literal("").transform(() => null), schema])
     .optional()
     .transform((v) => v ?? null);
+
+// Cantidad de meses del histórico del dashboard: entero 1–12 (por defecto 6).
+export const MESES_HISTORICO_DEFECTO = 6;
+export const mesesHistorico = z.coerce.number().int().min(1).max(12);

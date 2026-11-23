@@ -3,9 +3,7 @@
 ## Purpose
 
 Gestionar los abonos recibidos de los contratos de arriendo, permitiendo registrar, consultar, editar y eliminar pagos, y calcular dinámicamente sus estados, saldos pendientes y fechas de completitud, respetando los reajustes del monto esperado.
-
 ## Requirements
-
 ### Requirement: Registro de abono
 El sistema SHALL permitir registrar, contra un pago esperado existente, un abono con `montoClp` (entero > 0), `fechaRecepcion` y `medio` opcional, mediante `POST /api/propiedades/{id}/contratos/{contratoId}/pagos-esperados/{pagoId}/abonos`. Un pago esperado SHALL admitir uno o varios abonos y el sistema MUST NOT imponer un tope sobre el monto esperado.
 
@@ -171,20 +169,37 @@ El sistema SHALL listar los pagos esperados de un contrato, ordenados por perío
 - **THEN** el sistema responde 200 con una lista vacía y no crea pagos
 
 ### Requirement: Reajustes y sincronización con abonos
-El sistema SHALL conservar los abonos ante un reajuste: un reajuste que modifica `montoEsperadoClp` MUST NOT modificar, eliminar ni reasignar abonos y MUST NOT bloquearse por su existencia. El estado SHALL derivarse siempre sobre el monto esperado vigente. La sincronización de pagos esperados SHALL seguir siendo una operación explícita y MUST NOT ejecutarse al registrar, editar, eliminar o consultar abonos.
+El sistema SHALL conservar los abonos ante cualquier cambio de montos: ningún alta, corrección o eliminación de un monto o reajuste MUST modificar, eliminar ni reasignar abonos. Un reajuste (o corrección o eliminación de un monto) que modificaría `montoEsperadoClp` de un pago que ya tiene abonos SHALL rechazarse con 422, sin cambios parciales; un pago con abonos cuyo monto esperado no cambia MUST NOT bloquearlo. El estado SHALL derivarse siempre sobre el monto esperado vigente del pago, con las reglas de estado, saldo y fecha de completitud vigentes. La sincronización de pagos esperados SHALL seguir siendo una operación explícita y MUST NOT ejecutarse al registrar, editar, eliminar o consultar abonos.
 
-#### Scenario: Reajuste retroactivo con pago vencido
-- **WHEN** un reajuste sube el monto esperado a 530.000 con 500.000 abonados y la fecha esperada ya pasó (CL12)
+#### Scenario: Reajuste retroactivo sobre un pago con abonos
+- **WHEN** un reajuste subiría el monto esperado a 530.000 de un pago con 500.000 abonados (CL12/CL13 con reajuste)
+- **THEN** responde 422, el monto esperado, los abonos y el estado derivado del pago no cambian
+
+#### Scenario: Reajuste que bajaría el monto esperado de un pago con abonos
+- **WHEN** un reajuste bajaría el monto esperado por debajo de lo abonado (CL14 con reajuste)
+- **THEN** responde 422, los abonos y la fecha de completitud no cambian
+
+#### Scenario: Reajuste hacia adelante
+- **WHEN** hay abonos solo en períodos anteriores al del reajuste
+- **THEN** el reajuste se aplica a los pagos sin abonos y los abonos y pagos anteriores no cambian
+
+#### Scenario: Pago con abonos cuyo monto no cambia
+- **WHEN** un reajuste mantiene el monto esperado de un pago con abonos
+- **THEN** no se bloquea y el pago conserva su `updated_at`
+
+#### Scenario: Estado derivado sobre un monto esperado vencido con abonos parciales
+- **WHEN** un pago tiene monto esperado 530.000, 500.000 abonados y la fecha esperada ya pasó (CL12)
 - **THEN** el estado es `VENCIDO` con abonos parciales y saldo 30.000
 
-#### Scenario: Reajuste retroactivo con pago no vencido
-- **WHEN** el mismo reajuste ocurre con la fecha esperada aún no vencida (CL13)
+#### Scenario: Estado derivado sobre un monto esperado no vencido
+- **WHEN** el mismo pago consulta con la fecha esperada aún no vencida (CL13)
 - **THEN** el estado es `PARCIALMENTE_PAGADO` con saldo 30.000
 
-#### Scenario: Reajuste que baja el monto esperado
-- **WHEN** un reajuste baja el monto esperado por debajo de lo abonado (CL14)
-- **THEN** los abonos se conservan, el estado es `PAGADO` y la fecha de completitud se adelanta al abono que ahora basta
+#### Scenario: Estado derivado con abonos que superan el monto esperado
+- **WHEN** los abonos de un pago superan o igualan su monto esperado (CL14)
+- **THEN** el estado es `PAGADO` y la fecha de completitud es la del abono que basta
 
 #### Scenario: Registro de abono no sincroniza
 - **WHEN** se registra un abono sobre un pago existente
 - **THEN** no se crean ni modifican otros pagos esperados
+

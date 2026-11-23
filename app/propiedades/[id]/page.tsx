@@ -97,6 +97,9 @@ async function DetallePropiedad({
       <Link href={`/propiedades/${p.id}/movimientos`} className="mt-2 block text-sm underline">
         Movimientos financieros
       </Link>
+      <Link href={`/propiedades/${p.id}/documentos`} className="mt-2 block text-sm underline">
+        Documentos
+      </Link>
     </>
   );
 }

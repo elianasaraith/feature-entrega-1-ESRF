@@ -46,3 +46,23 @@ export function fechaEsperada(periodo: string, dia: number): string {
   const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
   return `${periodo.slice(0, 7)}-${String(Math.min(dia, ultimo)).padStart(2, "0")}`;
 }
+
+export type PagoMonto = { id: string; periodo: string; montoEsperadoClp: string };
+
+// Pagos esperados cuyo monto cambiaría con `filasNuevas` (la lista de montos ya
+// corregida o sin la fila eliminada). Solo se evalúan los períodos recibidos;
+// quien llama pasa los de período >= vigencia de la fila tocada, de modo que los
+// anteriores nunca se ven afectados. Sin monto vigente → no cambia (se omite).
+export function pagosQueCambian(
+  filasNuevas: FilaMonto[],
+  pagos: PagoMonto[]
+): { id: string; periodo: string; montoNuevo: string }[] {
+  const cambian: { id: string; periodo: string; montoNuevo: string }[] = [];
+  for (const pago of pagos) {
+    const monto = montoVigenteEn(filasNuevas, pago.periodo);
+    if (monto !== null && monto !== pago.montoEsperadoClp) {
+      cambian.push({ id: pago.id, periodo: pago.periodo, montoNuevo: monto });
+    }
+  }
+  return cambian;
+}

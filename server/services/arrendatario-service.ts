@@ -48,6 +48,24 @@ export function createArrendatarioService(prisma: PrismaClient) {
       return filas.map(toArrendatarioDto);
     },
 
+    async obtener(id: string): Promise<ArrendatarioDto> {
+      await asegurarArrendatario(prisma, id);
+      return toArrendatarioDto(await prisma.arrendatario.findUniqueOrThrow({ where: { id } }));
+    },
+
+    // Corrige los cuatro datos del arrendatario; el id, los contratos y el
+    // historial asociado no se tocan. Sin eliminación.
+    async actualizar(id: string, input: ArrendatarioInput): Promise<ArrendatarioDto> {
+      await asegurarArrendatario(prisma, id);
+      try {
+        const { nombre, rut, email, telefono } = input;
+        return toArrendatarioDto(await prisma.arrendatario.update({ where: { id }, data: { nombre, rut, email, telefono } }));
+      } catch (error) {
+        if (esRutDuplicado(error)) throw new ConflictError(RUT_DUPLICADO);
+        throw error;
+      }
+    },
+
     async crear(input: ArrendatarioInput): Promise<ArrendatarioDto> {
       try {
         return toArrendatarioDto(await prisma.arrendatario.create({ data: input }));

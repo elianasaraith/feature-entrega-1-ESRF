@@ -86,6 +86,13 @@ export const montoCrearSchema = z.object({
   motivo: optionalText,
 });
 
+// Corrección de una fila existente: solo monto y motivo; el período no se edita.
+export const montoCorregirSchema = z.object({
+  montoMensualClp: positiveIntegerText(14),
+  motivo: optionalText,
+});
+
+export type MontoCorregirInput = z.output<typeof montoCorregirSchema>;
 export type MontoCrearInput = z.output<typeof montoCrearSchema>;
 export type ContratoCrearInput = z.output<typeof contratoCrearSchema>;
 export type ContratoActualizarInput = z.output<typeof contratoActualizarSchema>;

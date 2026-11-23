@@ -1,14 +1,16 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { hoyChile } from "@/server/clock";
-import { etiquetaCalificacionPago, formatearClp, formatearUf } from "@/server/domain/dashboard";
-import { yearMonth } from "@/server/schemas/shared";
+import { etiquetaCalificacionPago, formatearClp, formatearUf, mesAdyacente } from "@/server/domain/dashboard";
+import { MESES_HISTORICO_DEFECTO, mesesHistorico, yearMonth } from "@/server/schemas/shared";
 import { dashboardService } from "@/server/services";
 import { etiquetaMes, formatearMontoClp, formatearValorUf, referenciasUf } from "@/server/uf/equivalente";
+import { HistoricoMensual } from "../_components/historico-mensual";
 import { ResumenMensual } from "../_components/resumen-mensual";
+import { SaldoConsolidado } from "../_components/saldo-consolidado";
 import { SelectorMes } from "../_components/selector-mes";
 
-type SearchParams = Promise<{ mes?: string | string[] }>;
+type SearchParams = Promise<{ mes?: string | string[]; meses?: string | string[] }>;
 
 const ESTADO: Record<string, string> = {
   PENDIENTE: "Pendiente",
@@ -36,7 +38,15 @@ async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
   const hoy = hoyChile();
   const parsed = yearMonth.safeParse(Array.isArray(crudo) ? crudo[0] : crudo);
   const mes = parsed.success ? parsed.data : hoy.slice(0, 7);
-  const resumen = await dashboardService.resumenMensualConEquivalentes(mes, hoy);
+  const crudoMeses = (await searchParams).meses;
+  const parsedMeses = mesesHistorico.safeParse(Array.isArray(crudoMeses) ? crudoMeses[0] : crudoMeses);
+  const meses = parsedMeses.success ? parsedMeses.data : MESES_HISTORICO_DEFECTO;
+  const [resumen, historico] = await Promise.all([
+    dashboardService.resumenMensualConEquivalentes(mes, hoy),
+    dashboardService.historico(mes, meses),
+  ]);
+  const consultaMeses = meses === 12 ? "" : "&meses=12";
+  const sufijoMeses = meses === MESES_HISTORICO_DEFECTO ? "" : `&meses=${meses}`;
   // Única referencia compartida: todos los saldos se convierten con la UF del mes
   // consultado. Solo existe si alguna UF se utilizó efectivamente.
   const referencia =
@@ -54,10 +64,33 @@ async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
         <h1 className="text-2xl font-semibold">Dashboard financiero · {mes}</h1>
         <SelectorMes mes={mes} />
       </div>
+      <nav className="mb-6 flex gap-4 text-sm">
+        <Link href={`?mes=${mesAdyacente(mes, -1)}${sufijoMeses}`} className="underline">
+          ← Mes anterior
+        </Link>
+        <Link href={`?mes=${mesAdyacente(mes, 1)}${sufijoMeses}`} className="underline">
+          Mes siguiente →
+        </Link>
+      </nav>
 
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-medium">Flujo de caja del mes</h2>
         <ResumenMensual totales={resumen.totales} />
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-2 text-lg font-medium">Saldo hipotecario consolidado</h2>
+        <SaldoConsolidado saldo={resumen.saldoConsolidado} />
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-2 text-lg font-medium">Histórico de los últimos {meses} meses</h2>
+        <HistoricoMensual periodos={historico.periodos} />
+        <p className="mt-2 text-sm">
+          <Link href={`?mes=${mes}${meses === 12 ? "" : consultaMeses}`} className="underline">
+            {meses === 12 ? "Ver 6 meses" : "Ver 12 meses"}
+          </Link>
+        </p>
       </section>
 
       <section className="mb-8">

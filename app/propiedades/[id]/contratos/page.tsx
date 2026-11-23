@@ -91,6 +91,12 @@ async function Contratos({ params }: { params: Promise<{ id: string }> }) {
                   >
                     Pagos
                   </Link>
+                  <Link
+                    href={`/propiedades/${propiedad.id}/contratos/${c.id}/arrendatario/editar`}
+                    className="ml-3 underline"
+                  >
+                    Editar arrendatario
+                  </Link>
                 </td>
               </tr>
             ))}

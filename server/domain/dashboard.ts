@@ -87,3 +87,38 @@ export function etiquetaCalificacionPago(pago: {
   if (pago.pagadoConAtraso) return "pagado con atraso";
   return null;
 }
+
+// --- Navegación e histórico mensual (aritmética entera; sin Date) ---
+
+function formatoMes(indice: number): string {
+  const anio = Math.floor(indice / 12);
+  const mes = (indice % 12) + 1;
+  return `${anio}-${String(mes).padStart(2, "0")}`;
+}
+
+function indiceMes(mes: string): number {
+  const [anio, m] = mes.split("-").map(Number);
+  return anio * 12 + (m - 1);
+}
+
+// "2026-01" con delta -1 → "2025-12"; "2026-12" con delta 1 → "2027-01".
+export function mesAdyacente(mes: string, delta: number): string {
+  return formatoMes(indiceMes(mes) + delta);
+}
+
+// Los `n` meses que terminan en `mesFin` inclusive, en orden ascendente.
+export function mesesHasta(mesFin: string, n: number): string[] {
+  const fin = indiceMes(mesFin);
+  return Array.from({ length: n }, (_, i) => formatoMes(fin - (n - 1) + i));
+}
+
+// --- Saldo hipotecario consolidado ---
+
+export type EstadoConsolidado = "COMPLETO" | "PARCIAL" | "SIN_SALDOS";
+
+// SIN_SALDOS: ningún crédito tiene saldo aplicable (o no hay créditos). PARCIAL:
+// solo algunos. Un saldo desconocido nunca se trata como cero.
+export function estadoConsolidado(conSaldo: number, total: number): EstadoConsolidado {
+  if (conSaldo <= 0) return "SIN_SALDOS";
+  return conSaldo < total ? "PARCIAL" : "COMPLETO";
+}

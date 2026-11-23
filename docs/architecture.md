@@ -5,9 +5,9 @@
 Este documento define la arquitectura del MVP de RealtyTrack: qué componentes existen, qué
 responsabilidad tiene cada uno y por qué.
 
-> **Todo lo descrito aquí es arquitectura diseñada y propuesta, no implementada.**
-> Entrega 1 es exclusivamente documental: no hay código de aplicación, ni despliegue real,
-> ni tests ejecutados. Lo que sigue es el diseño que guiará las entregas siguientes.
+> **Estado.** La aplicación (servicios, API, persistencia, autenticación, UF y documentos) está
+> implementada; este documento distingue en cada sección lo implementado de lo propuesto. El
+> **despliegue** (Vercel, Neon, variables de entorno en producción) sigue siendo diseño propuesto; el bucket de documentos (Cloudflare R2) está en uso y validado.
 
 Es el cuarto eslabón de la cadena documental: [product.md](product.md) fija el problema,
 [user-stories.md](user-stories.md) los criterios verificables, [data-model.md](data-model.md)
@@ -586,8 +586,14 @@ Definido contra la **API de S3**, con tres operaciones: URL firmada de subida, U
 lectura y borrado. El bucket es **privado**; ningún objeto es accesible públicamente.
 
 La interfaz S3 es una decisión confirmada —`CLAUDE.md` §Stack y `data-model.md` §4.13 exigen
-compatibilidad con S3—. El proveedor concreto es *propuesta a validar*: Cloudflare R2, AWS S3
-o Backblaze B2 la satisfacen.
+compatibilidad con S3—. **Proveedor objetivo confirmado: Cloudflare R2** (endpoint
+`https://<cuenta>.r2.cloudflarestorage.com`, región `auto`, direccionamiento por ruta; las URLs
+prefirmadas solo funcionan en ese dominio). AWS S3 o Backblaze B2 la satisfacen igualmente.
+
+*Implementado (T11):* además de las tres operaciones, el puerto inspecciona el objeto (tamaño y
+`Content-Type`) y lee sus primeros bytes. La firma SigV4 por query string usa solo `node:crypto`
+(`server/storage/s3-sigv4.ts`), sin SDK, y se verifica con el vector oficial de AWS; validada
+contra Cloudflare R2 real (subida, descarga y eliminación).
 
 ### 13.2 Subida directa desde el navegador
 
@@ -613,6 +619,16 @@ sequenceDiagram
     N->>A: registrar metadata (clave, nombre, tipo, tamaño)
     A->>D: insertar fila en documento
 ```
+
+*Seguridad de la subida (implementado).* La solicitud devuelve un `tokenSubida` (HMAC-SHA256 con
+`S3_SECRET_ACCESS_KEY`, solo servidor, sobre clave + tipo + tamaño + vencimiento de 10 min) que
+el registro exige: el cliente no puede registrar una clave que el servidor no emitió ni cambiar lo
+autorizado. La URL de subida (5 min) firma `Content-Type` y `Content-Length`. Al registrar, el
+servidor no confía en lo declarado: inspecciona el objeto, compara tamaño y `Content-Type` y lee
+los primeros 12 bytes para validar la firma del formato (PDF, JPEG, PNG, WebP); un objeto que no
+cumple se borra. Formatos permitidos: PDF, JPEG, PNG y WebP; máximo 20 MB (confirmados).
+Las credenciales viven solo en variables de entorno del servidor (nunca `NEXT_PUBLIC_*`) y no se
+registran en logs; el DTO de documento no expone la clave del objeto.
 
 ### 13.3 Objeto huérfano
 
@@ -842,7 +858,7 @@ controlado y anonimizado, sin importador.
 | Agregación con Prisma; SQL específico solo donde aporte | Conserva tipado y `Decimal`; SQL crudo no es una regla |
 | Rutas dinámicas para lo que depende de la fecha actual | Una página cacheada mostraría estados obsoletos |
 | Auth.js con credenciales y estrategia JWT | Delega la gestión de sesión; cumple lo que pide `CLAUDE.md` |
-| Puerto `ProveedorUf` y puerto `AlmacenDocumentos` | Aíslan al proveedor concreto (UF: findic.cl, implementado en T10; almacenamiento: sin decidir) |
+| Puerto `ProveedorUf` y puerto `AlmacenDocumentos` | Aíslan al proveedor concreto (UF: findic.cl, implementado en T10; almacenamiento: Cloudflare R2, implementado en T11) |
 | Consulta de UF bajo demanda, sin trabajo programado | Menos infraestructura para el mismo resultado |
 | Máximo de 6 llamadas simultáneas al proveedor y corte anticipado tras 6 fallos consecutivos, sin estado entre solicitudes | Evita esperar varias rondas de timeout con el proveedor caído, sin infraestructura adicional (§12.3) |
 | Subida directa al bucket por URL firmada | El binario no atraviesa el runtime de la aplicación |

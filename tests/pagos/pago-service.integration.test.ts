@@ -274,56 +274,106 @@ test("pertenencia: contrato/pago/abono de otro padre → 404 sin leer ni modific
   assert.equal(await prisma.abonoArriendo.count({ where: { pagoEsperadoId: p2.id } }), 0);
 });
 
-test("reajuste retroactivo conserva abonos: CL12 vencido, CL13 no vencido, y baja de monto", { skip }, async () => {
-  const e = await nuevoEscenario();
-  const marzo = await pagoDe(e, "2026-03-01");
-  const a = await service.crearAbono(e.propiedad, e.contrato, marzo.id, abono(300000, "2026-03-02"), REF);
-  await service.crearAbono(e.propiedad, e.contrato, marzo.id, abono(300000, "2026-03-08"), REF);
-  const junio = await pagoDe(e, "2026-06-01");
-  await service.crearAbono(e.propiedad, e.contrato, junio.id, abono(600000, "2026-06-01"), "2026-06-02");
-  assert.equal((await pagoDe(e, "2026-03-01")).estado, "PAGADO");
+// Estado íntegro del contrato: montos, pagos esperados (con updated_at) y abonos.
+async function instantanea(e: { contrato: string }) {
+  const [montos, pagos, abonos] = await Promise.all([
+    prisma.contratoMonto.findMany({ where: { contratoId: e.contrato }, orderBy: { vigenteDesdePeriodo: "asc" } }),
+    prisma.pagoEsperado.findMany({ where: { contratoId: e.contrato }, orderBy: { periodo: "asc" } }),
+    prisma.abonoArriendo.findMany({ where: { pagoEsperado: { contratoId: e.contrato } }, orderBy: { id: "asc" } }),
+  ]);
+  return {
+    montos: montos.map((m) => [m.id, m.montoMensualClp.toString(), m.updatedAt.getTime()]),
+    pagos: pagos.map((p) => [p.id, p.montoEsperadoClp.toString(), p.updatedAt.getTime()]),
+    abonos: abonos.map((a) => [a.id, a.pagoEsperadoId, a.montoClp.toString(), a.fechaRecepcion.getTime(), a.updatedAt.getTime()]),
+  };
+}
+const estados = async (e: { propiedad: string; contrato: string }) =>
+  (await service.listarPagos(e.propiedad, e.contrato, REF)).map((p) => [p.periodo, p.estado, p.saldoPendienteClp, p.fechaCompletitud]);
 
-  // Reajuste a 630.000 desde marzo (retroactivo).
-  await contratos.registrarMonto(
-    e.propiedad, e.contrato,
-    montoCrearSchema.parse({ montoMensualClp: "630000", vigenteDesdePeriodo: "2026-03" })
-  );
-  assert.equal(await prisma.abonoArriendo.count({ where: { pagoEsperadoId: marzo.id } }), 2);
-  const m = await pagoDe(e, "2026-03-01");
-  assert.equal(m.estado, "VENCIDO"); // CL12
-  assert.equal(m.vencidoConAbonosParciales, true);
-  assert.equal(m.saldoPendienteClp, "30000");
-  assert.equal(m.fechaCompletitud, null);
-
-  // CL13: el pago de junio (fecha 06-05) consultado antes de vencer.
-  const j = await pagoDe(e, "2026-06-01", "2026-06-04");
-  assert.equal(j.estado, "PARCIALMENTE_PAGADO");
-  assert.equal(j.saldoPendienteClp, "30000");
-
-  assert.equal(await prisma.abonoArriendo.count({ where: { id: a.id } }), 1);
-});
-
-test("un reajuste que baja el esperado adelanta la fecha de completitud y conserva abonos (CL14)", { skip }, async () => {
+test("un reajuste retroactivo que subiría un pago con abonos se rechaza (422) y conserva todo íntegro", { skip }, async () => {
   const e = await nuevoEscenario();
   const marzo = await pagoDe(e, "2026-03-01");
   await service.crearAbono(e.propiedad, e.contrato, marzo.id, abono(300000, "2026-03-02"), REF);
   await service.crearAbono(e.propiedad, e.contrato, marzo.id, abono(300000, "2026-03-08"), REF);
-  let m = await pagoDe(e, "2026-03-01");
+  const junio = await pagoDe(e, "2026-06-01");
+  await service.crearAbono(e.propiedad, e.contrato, junio.id, abono(600000, "2026-06-01"), "2026-06-02");
+  assert.equal((await pagoDe(e, "2026-03-01")).estado, "PAGADO");
+  const antes = await instantanea(e);
+  const estadosAntes = await estados(e);
+
+  // Reajuste a 630.000 desde marzo: cambiaría pagos con abonos (marzo y junio).
+  await assert.rejects(
+    contratos.registrarMonto(
+      e.propiedad, e.contrato,
+      montoCrearSchema.parse({ montoMensualClp: "630000", vigenteDesdePeriodo: "2026-03" })
+    ),
+    (err) => err instanceof UnprocessableError && /2026-03/.test(err.message) && /2026-06/.test(err.message)
+  );
+  assert.deepEqual(await instantanea(e), antes); // montos, pagos esperados y abonos intactos
+  assert.deepEqual(await estados(e), estadosAntes); // estados derivados sin cambios
+  assert.equal((await pagoDe(e, "2026-03-01")).montoEsperadoClp, "600000");
+});
+
+test("un reajuste que bajaría un pago con abonos (antes CL14) también se rechaza y conserva todo íntegro", { skip }, async () => {
+  const e = await nuevoEscenario();
+  const marzo = await pagoDe(e, "2026-03-01");
+  await service.crearAbono(e.propiedad, e.contrato, marzo.id, abono(300000, "2026-03-02"), REF);
+  await service.crearAbono(e.propiedad, e.contrato, marzo.id, abono(300000, "2026-03-08"), REF);
+  const m = await pagoDe(e, "2026-03-01");
   assert.equal(m.fechaCompletitud, "2026-03-08");
   assert.equal(m.pagadoConAtraso, true);
+  const antes = await instantanea(e);
 
-  // Nuevo monto 300.000 desde febrero: rige también en marzo.
+  // Nuevo monto 300.000 desde febrero: regiría también en marzo (con abonos).
+  await assert.rejects(
+    contratos.registrarMonto(
+      e.propiedad, e.contrato,
+      montoCrearSchema.parse({ montoMensualClp: "300000", vigenteDesdePeriodo: "2026-02" })
+    ),
+    UnprocessableError
+  );
+  assert.deepEqual(await instantanea(e), antes);
+  const despues = await pagoDe(e, "2026-03-01");
+  assert.equal(despues.montoEsperadoClp, "600000");
+  assert.equal(despues.fechaCompletitud, "2026-03-08");
+  assert.equal(despues.pagadoConAtraso, true);
+  assert.equal(despues.abonos.length, 2);
+});
+
+test("un reajuste hacia adelante conserva los abonos de períodos anteriores y actualiza los pagos sin abonos", { skip }, async () => {
+  const e = await nuevoEscenario();
+  const marzo = await pagoDe(e, "2026-03-01");
+  await service.crearAbono(e.propiedad, e.contrato, marzo.id, abono(300000, "2026-03-02"), REF);
+  await service.crearAbono(e.propiedad, e.contrato, marzo.id, abono(300000, "2026-03-08"), REF);
+  const abonosAntes = (await instantanea(e)).abonos;
+
+  // Desde abril (abril a junio sin abonos): procede; marzo, con abonos, no cambia.
   await contratos.registrarMonto(
     e.propiedad, e.contrato,
-    montoCrearSchema.parse({ montoMensualClp: "300000", vigenteDesdePeriodo: "2026-02" })
+    montoCrearSchema.parse({ montoMensualClp: "630000", vigenteDesdePeriodo: "2026-04" })
   );
-  m = await pagoDe(e, "2026-03-01");
-  assert.equal(m.montoEsperadoClp, "300000");
+  assert.deepEqual((await instantanea(e)).abonos, abonosAntes);
+  const m = await pagoDe(e, "2026-03-01");
+  assert.equal(m.montoEsperadoClp, "600000");
   assert.equal(m.estado, "PAGADO");
-  assert.equal(m.fechaCompletitud, "2026-03-02");
-  assert.equal(m.pagadoConAtraso, false);
-  assert.equal(m.recibidoClp, "600000");
   assert.equal(m.abonos.length, 2);
+  for (const periodo of ["2026-04-01", "2026-05-01", "2026-06-01"]) {
+    assert.equal((await pagoDe(e, periodo)).montoEsperadoClp, "630000", periodo);
+  }
+});
+
+test("un reajuste que no cambia el monto esperado de un pago con abonos no se bloquea", { skip }, async () => {
+  const e = await nuevoEscenario();
+  const marzo = await pagoDe(e, "2026-03-01");
+  await service.crearAbono(e.propiedad, e.contrato, marzo.id, abono(100000, "2026-03-02"), REF);
+  const pagoAntes = (await instantanea(e)).pagos.find((p) => p[0] === marzo.id);
+  // Mismo monto que el vigente (600.000) desde marzo: no cambia ningún pago.
+  await contratos.registrarMonto(
+    e.propiedad, e.contrato,
+    montoCrearSchema.parse({ montoMensualClp: "600000", vigenteDesdePeriodo: "2026-03" })
+  );
+  assert.deepEqual((await instantanea(e)).pagos.find((p) => p[0] === marzo.id), pagoAntes);
+  assert.equal((await pagoDe(e, "2026-03-01")).abonos.length, 1);
 });
 
 test("alta, edición y baja de abonos no sincronizan ni modifican pagos esperados", { skip }, async () => {

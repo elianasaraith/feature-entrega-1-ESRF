@@ -594,6 +594,10 @@ El día que representa al período es **día 1**: decisión confirmada, ver §8.
 
 Metadata de los archivos asociados a una propiedad. **PostgreSQL no guarda binarios**: el
 archivo vive en object storage compatible con S3, referenciado por `storage_key`.
+*Implementado en T11* (migración `20261123120000_add_documento`): el enum se llama
+`tipo_documento`; las cuatro FK específicas usan `ON DELETE SET NULL` (un abono o movimiento
+eliminado deja el documento localizable desde su propiedad) y `propiedad_id` usa `RESTRICT`;
+`CHECK` de exclusividad y `tamano_bytes > 0` en la migración; índice `(propiedad_id, subido_en)`.
 
 | Atributo | Tipo | Nulo | Restricción | Descripción |
 |---|---|---|---|---|

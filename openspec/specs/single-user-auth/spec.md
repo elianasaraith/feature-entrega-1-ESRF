@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - Purpose not yet documented for this capability.
+Esta capability define el acceso protegido de usuario único (T12): inicio de sesión con email y contraseña mediante Auth.js con sesión JWT, contraseña almacenada solo como hash Argon2id, protección global de rutas y de `/api` sin sesión y un mecanismo reutilizable de comprobación de sesión para los Route Handlers. El único usuario se crea por seed, de forma idempotente y sin sobrescribir credenciales; no hay registro, invitaciones, perfiles, roles ni recuperación de contraseña.
 
 ## Requirements
 

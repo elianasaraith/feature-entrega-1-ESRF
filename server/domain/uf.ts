@@ -16,3 +16,10 @@ export function convertirUfAClp(montoUf: string, valorClp: string): string {
   }
   return monto.mul(valor).toFixed();
 }
+
+// Suma exacta de importes en UF (misma precisión que la conversión). Sin Number.
+export function sumarUf(montosUf: string[]): string {
+  let total = new Decimal(0);
+  for (const m of montosUf) total = total.plus(new Decimal(m));
+  return total.toFixed();
+}

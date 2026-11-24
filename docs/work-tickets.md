@@ -156,6 +156,15 @@ registro mensual de dividendo y saldo (T03); documentos del crédito (T11).
 - Unitario de dominio: conversión UF → CLP con un valor fijo de `valor_uf_periodo`.
 - API: 409 al intentar un segundo crédito sobre la misma propiedad.
 
+**Estado de implementación (T02, ampliación `porcentaje-pie-hipotecario`).** Se añadió
+`credito_hipotecario.porcentaje_pie` (`NUMERIC(5,2)`, opcional, `CHECK` 0–100; `null` = no
+informado, `0` es válido). Es un dato informado: no se deduce del monto original ni modifica
+montos, dividendos, saldos, UF, pagos o dashboard, y no es un egreso. La consulta con equivalentes
+añade `pieEstimado` (valor de compra × porcentaje / 100, en la moneda del valor de compra, calculado
+al consultar) y el detalle del crédito muestra porcentaje, monto estimado y barra pie/resto.
+Migración `20261124120000_add_credito_porcentaje_pie` no destructiva (debe aplicarse con
+`npx prisma migrate deploy`). Validado localmente por la persona.
+
 ---
 
 ### 4.3 T03 — Registro mensual de dividendo y saldo del crédito

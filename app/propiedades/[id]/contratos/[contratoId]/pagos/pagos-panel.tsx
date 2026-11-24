@@ -2,17 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { clp, fecha } from "../../../../../_lib/format";
+import { Alert, BadgeEstadoPago, Button, Card, CardBody, ConfirmDialog, DataTable, EmptyState, FormField, Input, Td, Th } from "../../../../../_ui";
 import type { AbonoDto, PagoDto } from "@/server/services/pago-service";
 
 type Props = { propiedadId: string; contratoId: string; hoy: string; pagos: PagoDto[] };
 
-const inputClass = "w-full rounded border px-2 py-1";
-const ETIQUETA: Record<PagoDto["estado"], string> = {
-  PENDIENTE: "Pendiente",
-  PARCIALMENTE_PAGADO: "Parcialmente pagado",
-  VENCIDO: "Vencido",
-  PAGADO: "Pagado",
-};
 
 // Lista pagos con su estado y permite registrar, editar y eliminar abonos. El
 // estado, el saldo y las calificaciones los calcula el servidor: aquí solo se
@@ -34,7 +29,7 @@ export function PagosPanel({ propiedadId, contratoId, hoy, pagos }: Props) {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!formulario) return;
+    if (!formulario || enviando) return;
     const campos = Object.fromEntries(new FormData(event.currentTarget).entries());
     setEnviando(true);
     setErrores({});
@@ -68,11 +63,14 @@ export function PagosPanel({ propiedadId, contratoId, hoy, pagos }: Props) {
     }
   }
 
-  async function eliminar(pagoId: string, abono: AbonoDto) {
-    if (!window.confirm(`¿Eliminar el abono de ${abono.montoClp} CLP del ${abono.fechaRecepcion}? Esta acción no se puede deshacer.`)) {
-      return;
-    }
+  const [aEliminar, setAEliminar] = useState<{ pagoId: string; abono: AbonoDto } | null>(null);
+  const [eliminando, setEliminando] = useState(false);
+
+  async function eliminar() {
+    if (!aEliminar) return;
+    const { pagoId, abono } = aEliminar;
     setErrorGeneral(null);
+    setEliminando(true);
     try {
       const respuesta = await fetch(`${base}/${pagoId}/abonos/${abono.id}`, { method: "DELETE" });
       if (!respuesta.ok) {
@@ -83,158 +81,141 @@ export function PagosPanel({ propiedadId, contratoId, hoy, pagos }: Props) {
       router.refresh();
     } catch {
       setErrorGeneral("No se pudo eliminar");
+    } finally {
+      setEliminando(false);
+      setAEliminar(null);
     }
   }
 
-  const mensajes = (nombre: string) =>
-    errores[nombre]?.map((mensaje) => (
-      <span key={mensaje} className="block text-red-600">
-        {mensaje}
-      </span>
-    ));
-
   if (pagos.length === 0) {
-    return <p className="text-sm">Este contrato aún no tiene pagos esperados.</p>;
+    return (
+      <Card>
+        <EmptyState titulo="Sin pagos esperados" descripcion="Este contrato aún no tiene pagos esperados. Créelos desde Montos con «Sincronizar pagos esperados»." />
+      </Card>
+    );
   }
 
   return (
     <div className="space-y-4">
-      {errorGeneral && <p className="text-red-600">{errorGeneral}</p>}
-      {pagos.map((p) => (
-        <section key={p.id} className="rounded border p-3">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="font-semibold">{p.periodo.slice(0, 7)}</h2>
-            <span className="text-sm font-medium">
-              {ETIQUETA[p.estado]}
-              {p.vencidoConAbonosParciales && " · con abonos parciales"}
-              {p.pagadoConAtraso && " · con atraso"}
-            </span>
-          </div>
-          <dl className="my-2 grid grid-cols-2 gap-x-4 text-sm sm:grid-cols-4">
-            <div>
-              <dt className="text-xs">Esperado (CLP)</dt>
-              <dd>{p.montoEsperadoClp}</dd>
-            </div>
-            <div>
-              <dt className="text-xs">Recibido (CLP)</dt>
-              <dd>{p.recibidoClp}</dd>
-            </div>
-            <div>
-              <dt className="text-xs">Saldo pendiente (CLP)</dt>
-              <dd>{p.saldoPendienteClp}</dd>
-            </div>
-            <div>
-              <dt className="text-xs">
-                Fecha esperada{p.fechaEsperada < hoy && p.estado !== "PAGADO" ? " (vencida)" : ""}
-              </dt>
-              <dd>
-                {p.fechaEsperada}
-                {p.fechaCompletitud && <span className="block text-xs">Completado el {p.fechaCompletitud}</span>}
-              </dd>
-            </div>
-          </dl>
-
-          {p.abonos.length > 0 && (
-            <table className="mb-2 w-full text-sm">
-              <thead>
-                <tr className="text-left">
-                  <th className="py-1">Recepción</th>
-                  <th>Monto (CLP)</th>
-                  <th>Medio</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {p.abonos.map((a) => (
-                  <tr key={a.id} className="border-t">
-                    <td className="py-1">{a.fechaRecepcion}</td>
-                    <td>{a.montoClp}</td>
-                    <td>{a.medio ?? "—"}</td>
-                    <td className="text-right">
-                      <button type="button" onClick={() => abrir(p.id, a)} className="underline">
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => eliminar(p.id, a)}
-                        className="ml-3 text-red-700 underline"
-                      >
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {formulario?.pagoId === p.id ? (
-            <form
-              key={formulario.abono?.id ?? "nuevo"}
-              onSubmit={onSubmit}
-              className="space-y-3 rounded border p-3"
-            >
-              <h3 className="text-sm font-semibold">
-                {formulario.abono ? "Editar abono" : "Registrar abono"}
-              </h3>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium">Monto (CLP)</span>
-                <input
-                  name="montoClp"
-                  type="text"
-                  inputMode="numeric"
-                  required
-                  defaultValue={formulario.abono?.montoClp ?? ""}
-                  className={inputClass}
-                />
-                {mensajes("montoClp")}
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium">Fecha de recepción</span>
-                <input
-                  name="fechaRecepcion"
-                  type="date"
-                  required
-                  max={hoy}
-                  defaultValue={formulario.abono?.fechaRecepcion ?? hoy}
-                  className={inputClass}
-                />
-                {mensajes("fechaRecepcion")}
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium">Medio (opcional)</span>
-                <input
-                  name="medio"
-                  type="text"
-                  placeholder="Transferencia, depósito, efectivo"
-                  defaultValue={formulario.abono?.medio ?? ""}
-                  className={inputClass}
-                />
-              </label>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={enviando}
-                  className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-                >
-                  {enviando ? "Guardando…" : "Guardar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormulario(null)}
-                  className="rounded border px-4 py-2 text-sm"
-                >
-                  Cancelar
-                </button>
+      {errorGeneral && !formulario && <Alert tono="error">{errorGeneral}</Alert>}
+      {pagos.map((p) => {
+        const vencida = p.fechaEsperada < hoy && p.estado !== "PAGADO";
+        return (
+          <Card key={p.id}>
+            <CardBody className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-base font-semibold text-ink">{p.periodo.slice(0, 7)}</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <BadgeEstadoPago estado={p.estado} />
+                  {p.vencidoConAbonosParciales && <span className="text-xs text-muted">con abonos parciales</span>}
+                  {p.pagadoConAtraso && <span className="text-xs text-muted">con atraso</span>}
+                </div>
               </div>
-            </form>
-          ) : (
-            <button type="button" onClick={() => abrir(p.id, null)} className="rounded border px-3 py-1 text-sm">
-              Registrar abono
-            </button>
-          )}
-        </section>
-      ))}
+              <dl className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted">Esperado</dt>
+                  <dd className="mt-1 text-sm font-semibold tabular-nums">{clp(p.montoEsperadoClp)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted">Recibido</dt>
+                  <dd className="mt-1 text-sm font-semibold tabular-nums text-positive">{clp(p.recibidoClp)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted">Saldo pendiente</dt>
+                  <dd className="mt-1 text-sm font-semibold tabular-nums">{clp(p.saldoPendienteClp)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted">Fecha esperada{vencida ? " (vencida)" : ""}</dt>
+                  <dd className={`mt-1 text-sm ${vencida ? "font-medium text-negative" : ""}`}>
+                    {fecha(p.fechaEsperada)}
+                    {p.fechaCompletitud && <span className="block text-xs text-muted">Completado el {fecha(p.fechaCompletitud)}</span>}
+                  </dd>
+                </div>
+              </dl>
+
+              {p.abonos.length > 0 && (
+                <div className="rounded-lg border border-line">
+                  <DataTable>
+                    <caption className="sr-only">Abonos del período {p.periodo.slice(0, 7)}</caption>
+                    <thead>
+                      <tr>
+                        <Th>Recepción</Th>
+                        <Th alinear="right">Monto</Th>
+                        <Th>Medio</Th>
+                        <Th alinear="right">Acciones</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {p.abonos.map((a) => (
+                        <tr key={a.id}>
+                          <Td className="whitespace-nowrap">{fecha(a.fechaRecepcion)}</Td>
+                          <Td numerico>{clp(a.montoClp)}</Td>
+                          <Td>{a.medio ?? "—"}</Td>
+                          <Td alinear="right" className="whitespace-nowrap">
+                            <Button tamano="sm" variante="ghost" onClick={() => abrir(p.id, a)}>
+                              Editar
+                            </Button>
+                            <Button tamano="sm" variante="ghost" className="text-negative hover:text-negative" onClick={() => setAEliminar({ pagoId: p.id, abono: a })}>
+                              Eliminar
+                            </Button>
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </DataTable>
+                </div>
+              )}
+
+              {formulario?.pagoId === p.id ? (
+                <form
+                  key={formulario.abono?.id ?? "nuevo"}
+                  onSubmit={onSubmit}
+                  className="grid gap-4 rounded-lg border border-line bg-canvas/50 p-4 sm:grid-cols-3"
+                >
+                  <h3 className="text-sm font-semibold sm:col-span-3">{formulario.abono ? "Editar abono" : "Registrar abono"}</h3>
+                  <FormField etiqueta="Monto (CLP)" requerido errores={errores.montoClp}>
+                    <Input name="montoClp" type="text" inputMode="numeric" required defaultValue={formulario.abono?.montoClp ?? ""} />
+                  </FormField>
+                  <FormField etiqueta="Fecha de recepción" requerido errores={errores.fechaRecepcion}>
+                    <Input name="fechaRecepcion" type="date" required max={hoy} defaultValue={formulario.abono?.fechaRecepcion ?? hoy} />
+                  </FormField>
+                  <FormField etiqueta="Medio (opcional)">
+                    <Input name="medio" type="text" placeholder="Transferencia, depósito, efectivo" defaultValue={formulario.abono?.medio ?? ""} />
+                  </FormField>
+                  {errorGeneral && (
+                    <div className="sm:col-span-3">
+                      <Alert tono="error">{errorGeneral}</Alert>
+                    </div>
+                  )}
+                  <div className="flex gap-2 sm:col-span-3">
+                    <Button type="submit" cargando={enviando}>
+                      {enviando ? "Guardando…" : "Guardar"}
+                    </Button>
+                    <Button variante="secondary" onClick={() => setFormulario(null)} disabled={enviando}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div>
+                  <Button variante="secondary" tamano="sm" onClick={() => abrir(p.id, null)}>
+                    Registrar abono
+                  </Button>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        );
+      })}
+
+      <ConfirmDialog
+        abierto={aEliminar !== null}
+        titulo="Eliminar abono"
+        descripcion={aEliminar ? `Se eliminará el abono de ${clp(aEliminar.abono.montoClp)} del ${fecha(aEliminar.abono.fechaRecepcion)}. Esta acción no se puede deshacer.` : undefined}
+        cargando={eliminando}
+        onCancelar={() => setAEliminar(null)}
+        onConfirmar={eliminar}
+      />
     </div>
   );
 }

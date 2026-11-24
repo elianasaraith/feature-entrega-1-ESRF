@@ -1,20 +1,19 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { hoyChile } from "@/server/clock";
+import { hoyActual } from "../../../_lib/hoy";
 import { NotFoundError } from "@/server/errors";
 import { contratoService, creditoService, documentoService, propiedadService } from "@/server/services";
+import { fecha } from "../../../_lib/format";
+import { LoadingState, PageHeader } from "../../../_ui";
 import { DocumentosPanel } from "./documentos-panel";
 
 type Params = Promise<{ id: string }>;
 
 export default function DocumentosPage({ params }: { params: Params }) {
   return (
-    <main className="mx-auto w-full max-w-4xl p-6">
-      <Suspense fallback={<p>Cargando…</p>}>
-        <Documentos params={params} />
-      </Suspense>
-    </main>
+    <Suspense fallback={<LoadingState />}>
+      <Documentos params={params} />
+    </Suspense>
   );
 }
 
@@ -26,7 +25,7 @@ async function Documentos({ params }: { params: Params }) {
   });
   const [documentos, contratos, credito] = await Promise.all([
     documentoService.listar(id),
-    contratoService.listar(id, hoyChile()),
+    contratoService.listar(id, await hoyActual()),
     creditoService.obtenerPorPropiedad(id).catch((error) => {
       if (error instanceof NotFoundError) return null;
       throw error;
@@ -34,15 +33,20 @@ async function Documentos({ params }: { params: Params }) {
   ]);
   return (
     <>
-      <Link href={`/propiedades/${propiedad.id}`} className="text-sm underline">
-        ← Departamento {propiedad.numeroDepartamento}
-      </Link>
-      <h1 className="my-4 text-2xl font-semibold">Documentos · departamento {propiedad.numeroDepartamento}</h1>
+      <PageHeader
+        titulo="Documentos"
+        descripcion={`Archivos del departamento ${propiedad.numeroDepartamento}`}
+        migas={[
+          { etiqueta: "Propiedades", href: "/propiedades" },
+          { etiqueta: `Depto ${propiedad.numeroDepartamento}`, href: `/propiedades/${propiedad.id}` },
+          { etiqueta: "Documentos" },
+        ]}
+      />
       <DocumentosPanel
         propiedadId={propiedad.id}
         documentos={documentos}
         creditoId={credito?.id ?? null}
-        contratos={contratos.map((c) => ({ id: c.id, etiqueta: `${c.arrendatario.nombre} (${c.fechaInicio} a ${c.fechaTermino})` }))}
+        contratos={contratos.map((c) => ({ id: c.id, etiqueta: `${c.arrendatario.nombre} (${fecha(c.fechaInicio)} a ${fecha(c.fechaTermino)})` }))}
       />
     </>
   );

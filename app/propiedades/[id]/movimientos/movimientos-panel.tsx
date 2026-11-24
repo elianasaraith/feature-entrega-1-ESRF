@@ -9,6 +9,9 @@ import {
   esMontoEnteroTexto,
   sumarConceptos,
 } from "@/server/domain/movimiento-desglose";
+import { clp, fecha } from "../../../_lib/format";
+import { Alert, Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, DataTable, EmptyState, FormField, Input, Select, Td, Th } from "../../../_ui";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import type { MovimientoDto, MovimientosListadoDto } from "@/server/services/movimiento-service";
 
 type Props = { propiedadId: string; hoy: string; mes: string; listado: MovimientosListadoDto };
@@ -16,7 +19,6 @@ type Props = { propiedadId: string; hoy: string; mes: string; listado: Movimient
 // Fila editable del desglose. `clave` es solo para React: sobrevive a quitar filas.
 type Fila = { clave: number; nombre: string; montoClp: string };
 
-const inputClass = "w-full rounded border px-2 py-1";
 const ETIQUETA: Record<MovimientoDto["categoria"], string> = {
   REPARACION: "Reparación",
   EQUIPAMIENTO: "Equipamiento",
@@ -92,7 +94,7 @@ export function MovimientosPanel({ propiedadId, hoy, mes, listado }: Props) {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!formulario) return;
+    if (!formulario || enviando) return;
     if (desglosar && hayFilasInvalidas) return; // el botón ya está deshabilitado; defensa
     const campos = Object.fromEntries(new FormData(event.currentTarget).entries());
     setEnviando(true);
@@ -138,16 +140,15 @@ export function MovimientosPanel({ propiedadId, hoy, mes, listado }: Props) {
     }
   }
 
-  async function eliminar(m: MovimientoDto) {
-    const detalle = m.conceptos.length > 0 ? ` (con ${m.conceptos.length} conceptos)` : "";
-    if (
-      !window.confirm(`¿Eliminar el movimiento de ${m.montoClp} CLP del ${m.fecha}${detalle}? Esta acción no se puede deshacer.`)
-    ) {
-      return;
-    }
+  const [aEliminar, setAEliminar] = useState<MovimientoDto | null>(null);
+  const [eliminando, setEliminando] = useState(false);
+
+  async function eliminar() {
+    if (!aEliminar) return;
     setErrorGeneral(null);
+    setEliminando(true);
     try {
-      const respuesta = await fetch(`${base}/${m.id}`, { method: "DELETE" });
+      const respuesta = await fetch(`${base}/${aEliminar.id}`, { method: "DELETE" });
       if (!respuesta.ok) {
         const datos = await respuesta.json().catch(() => null);
         setErrorGeneral(datos?.error ?? "No se pudo eliminar");
@@ -156,248 +157,244 @@ export function MovimientosPanel({ propiedadId, hoy, mes, listado }: Props) {
       router.refresh();
     } catch {
       setErrorGeneral("No se pudo eliminar");
+    } finally {
+      setEliminando(false);
+      setAEliminar(null);
     }
   }
 
-  const mensajes = (nombre: string) =>
-    errores[nombre]?.map((mensaje) => (
-      <span key={mensaje} className="block text-red-600">
-        {mensaje}
-      </span>
-    ));
-
   return (
-    <div className="space-y-4">
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Mes</span>
-        <input
-          type="month"
-          value={mes}
-          onChange={(e) => e.target.value && router.push(`?mes=${e.target.value}`)}
-          className="rounded border px-2 py-1"
-        />
-      </label>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <label className="block text-sm">
+          <span className="mb-1.5 block font-medium text-ink">Mes</span>
+          <Input
+            type="month"
+            value={mes}
+            onChange={(e) => e.target.value && router.push(`?mes=${e.target.value}`)}
+            className="h-10 w-44"
+          />
+        </label>
+        {!formulario && (
+          <Button onClick={() => abrir(null)}>
+            <Plus aria-hidden className="h-4 w-4" />
+            Registrar movimiento
+          </Button>
+        )}
+      </div>
 
-      {errorGeneral && <p className="text-red-600">{errorGeneral}</p>}
+      {errorGeneral && !formulario && <Alert tono="error">{errorGeneral}</Alert>}
 
-      <section className="rounded border p-3">
-        <p className="text-sm font-semibold">Total del mes: {listado.totalClp} CLP</p>
-        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
-          {CATEGORIAS_MOVIMIENTO.map((c) => (
-            <div key={c}>
-              <dt className="text-xs">{ETIQUETA[c]}</dt>
-              <dd>{listado.porCategoria[c]}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      {listado.movimientos.length === 0 ? (
-        <p className="text-sm">No hay movimientos en este mes.</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left">
-              <th className="py-1">Fecha</th>
-              <th>Categoría</th>
-              <th>Monto (CLP)</th>
-              <th>Descripción</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {listado.movimientos.map((m) => (
-              <Fragment key={m.id}>
-                {/* Una sola fila por movimiento, con su total; los conceptos van debajo. */}
-                <tr className="border-t">
-                  <td className="py-1">{m.fecha}</td>
-                  <td>{ETIQUETA[m.categoria]}</td>
-                  <td>{m.montoClp}</td>
-                  <td>{m.descripcion ?? "—"}</td>
-                  <td className="text-right">
-                    <button type="button" onClick={() => abrir(m)} className="underline">
-                      Editar
-                    </button>
-                    <button type="button" onClick={() => eliminar(m)} className="ml-3 text-red-700 underline">
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-                {m.conceptos.length > 0 && (
-                  <tr>
-                    <td />
-                    <td colSpan={4} className="pb-2">
-                      <p className="text-xs font-medium">Desglosado en {m.conceptos.length} conceptos</p>
-                      <ul className="list-disc pl-5 text-xs">
-                        {m.conceptos.map((c) => (
-                          <li key={c.id}>
-                            {c.nombre}: {c.montoClp} CLP
-                          </li>
-                        ))}
-                      </ul>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {formulario ? (
-        <form
-          key={formulario.movimiento?.id ?? "nuevo"}
-          onSubmit={onSubmit}
-          className="space-y-3 rounded border p-3"
-        >
-          <h2 className="text-sm font-semibold">
-            {formulario.movimiento ? "Editar movimiento" : "Registrar movimiento"}
-          </h2>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Fecha</span>
-            <input
-              name="fecha"
-              type="date"
-              required
-              max={hoy}
-              defaultValue={formulario.movimiento?.fecha ?? (hoy.startsWith(mes) ? hoy : `${mes}-01`)}
-              className={inputClass}
-            />
-            {mensajes("fecha")}
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Categoría</span>
-            <select
-              name="categoria"
-              required
-              defaultValue={formulario.movimiento?.categoria ?? "REPARACION"}
-              className={inputClass}
-            >
-              {CATEGORIAS_MOVIMIENTO.map((c) => (
-                <option key={c} value={c}>
-                  {ETIQUETA[c]}
-                </option>
-              ))}
-            </select>
-            {mensajes("categoria")}
-          </label>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={desglosar} onChange={(e) => setDesglosar(e.target.checked)} />
-            <span className="font-medium">Desglosar en conceptos</span>
-          </label>
-
-          {desglosar ? (
-            <fieldset className="space-y-2 rounded border p-2">
-              <legend className="px-1 text-xs font-medium">Conceptos (máximo {MAX_CONCEPTOS})</legend>
-              {filas.map((f, i) => (
-                <div key={f.clave} className="grid grid-cols-[1fr_9rem_auto] items-start gap-2 text-sm">
-                  <div>
-                    <input
-                      aria-label={`Nombre del concepto ${i + 1}`}
-                      placeholder="Nombre (ej. Materiales)"
-                      type="text"
-                      maxLength={MAX_NOMBRE_CONCEPTO}
-                      value={f.nombre}
-                      onChange={(e) => cambiarFila(f.clave, { nombre: e.target.value })}
-                      className={inputClass}
-                    />
-                    {mensajes(`conceptos.${i}.nombre`)}
-                  </div>
-                  <div>
-                    <input
-                      aria-label={`Monto del concepto ${i + 1} (CLP)`}
-                      placeholder="Monto CLP"
-                      type="text"
-                      inputMode="numeric"
-                      value={f.montoClp}
-                      onChange={(e) => cambiarFila(f.clave, { montoClp: e.target.value })}
-                      className={inputClass}
-                    />
-                    {mensajes(`conceptos.${i}.montoClp`)}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => quitarFila(f.clave)}
-                    disabled={filas.length <= 1}
-                    className="px-2 py-1 text-red-700 underline disabled:opacity-40"
-                  >
-                    Quitar
-                  </button>
-                </div>
-              ))}
-              {mensajes("conceptos")}
-              {hayFilasInvalidas && (
-                <p className="text-xs text-gray-600">
-                  Cada concepto necesita un nombre y un monto entero mayor que 0. Completa o quita las filas
-                  incompletas para poder guardar.
-                </p>
-              )}
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={agregarFila}
-                  disabled={filas.length >= MAX_CONCEPTOS}
-                  className="rounded border px-3 py-1 text-sm disabled:opacity-40"
-                >
-                  Agregar concepto
-                </button>
-                <span className="text-xs">{filas.length} de {MAX_CONCEPTOS}</span>
+      <Card>
+        <CardHeader titulo="Total del mes" descripcion="Egresos manuales registrados en el mes (el dividendo se registra en el crédito)." />
+        <CardBody className="space-y-4">
+          <p className="text-2xl font-semibold tabular-nums text-ink">{clp(listado.totalClp)}</p>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+            {CATEGORIAS_MOVIMIENTO.map((c) => (
+              <div key={c}>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">{ETIQUETA[c]}</dt>
+                <dd className="mt-0.5 text-sm tabular-nums">{clp(listado.porCategoria[c])}</dd>
               </div>
-              <p className="text-sm font-semibold">Total: {total} CLP</p>
-              {mensajes("montoClp")}
-            </fieldset>
-          ) : (
-            <>
-              {descartaDesglose && (
-                <p role="alert" className="rounded border border-amber-400 p-2 text-sm text-amber-800">
-                  Al guardar se eliminarán los {conceptosPrevios} conceptos de este gasto y quedará como gasto
-                  simple. Vuelve a activar «Desglosar en conceptos» para conservarlos.
-                </p>
-              )}
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium">Monto (CLP)</span>
-                <input
-                  name="montoClp"
-                  type="text"
-                  inputMode="numeric"
-                  required
-                  value={montoSimple}
-                  onChange={(e) => setMontoSimple(e.target.value)}
-                  className={inputClass}
-                />
-                {mensajes("montoClp")}
-              </label>
-            </>
-          )}
+            ))}
+          </dl>
+        </CardBody>
+      </Card>
 
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Descripción (opcional)</span>
-            <input
-              name="descripcion"
-              type="text"
-              defaultValue={formulario.movimiento?.descripcion ?? ""}
-              className={inputClass}
-            />
-          </label>
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={enviando || (desglosar && hayFilasInvalidas)}
-              className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-            >
-              {enviando ? "Guardando…" : "Guardar"}
-            </button>
-            <button type="button" onClick={() => setFormulario(null)} className="rounded border px-4 py-2 text-sm">
-              Cancelar
-            </button>
-          </div>
-        </form>
-      ) : (
-        <button type="button" onClick={() => abrir(null)} className="rounded border px-3 py-1 text-sm">
-          Registrar movimiento
-        </button>
+      {formulario && (
+        <Card>
+          <CardHeader titulo={formulario.movimiento ? "Editar movimiento" : "Registrar movimiento"} />
+          <CardBody>
+            <form key={formulario.movimiento?.id ?? "nuevo"} onSubmit={onSubmit} className="grid max-w-3xl gap-4 sm:grid-cols-2">
+              <FormField etiqueta="Fecha" requerido errores={errores.fecha}>
+                <Input name="fecha" type="date" required max={hoy} defaultValue={formulario.movimiento?.fecha ?? (hoy.startsWith(mes) ? hoy : `${mes}-01`)} />
+              </FormField>
+              <FormField etiqueta="Categoría" requerido errores={errores.categoria}>
+                <Select name="categoria" required defaultValue={formulario.movimiento?.categoria ?? "REPARACION"}>
+                  {CATEGORIAS_MOVIMIENTO.map((c) => (
+                    <option key={c} value={c}>
+                      {ETIQUETA[c]}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+
+              <label className="flex cursor-pointer items-center gap-2 text-sm sm:col-span-2">
+                <input type="checkbox" checked={desglosar} onChange={(e) => setDesglosar(e.target.checked)} className="h-4 w-4" />
+                <span className="font-medium text-ink">Desglosar en conceptos</span>
+              </label>
+
+              {desglosar ? (
+                <fieldset className="space-y-3 rounded-lg border border-line p-4 sm:col-span-2">
+                  <legend className="px-1 text-xs font-medium text-muted">Conceptos (máximo {MAX_CONCEPTOS})</legend>
+                  {filas.map((f, i) => (
+                    <div key={f.clave} className="grid grid-cols-[1fr_auto] items-start gap-2 text-sm sm:grid-cols-[1fr_10rem_auto]">
+                      <div className="col-span-2 sm:col-span-1">
+                        <Input
+                          aria-label={`Nombre del concepto ${i + 1}`}
+                          placeholder="Nombre (ej. Materiales)"
+                          type="text"
+                          maxLength={MAX_NOMBRE_CONCEPTO}
+                          value={f.nombre}
+                          onChange={(e) => cambiarFila(f.clave, { nombre: e.target.value })}
+                        />
+                        {errores[`conceptos.${i}.nombre`]?.map((m) => (
+                          <span key={m} role="alert" className="mt-1 block text-xs font-medium text-negative">
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                      <div>
+                        <Input
+                          aria-label={`Monto del concepto ${i + 1} (CLP)`}
+                          placeholder="Monto CLP"
+                          type="text"
+                          inputMode="numeric"
+                          value={f.montoClp}
+                          onChange={(e) => cambiarFila(f.clave, { montoClp: e.target.value })}
+                        />
+                        {errores[`conceptos.${i}.montoClp`]?.map((m) => (
+                          <span key={m} role="alert" className="mt-1 block text-xs font-medium text-negative">
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                      <Button variante="ghost" aria-label={`Quitar concepto ${i + 1}`} onClick={() => quitarFila(f.clave)} disabled={filas.length <= 1} className="h-10 text-negative">
+                        <Trash2 aria-hidden className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {errores.conceptos?.map((m) => (
+                    <span key={m} role="alert" className="block text-xs font-medium text-negative">
+                      {m}
+                    </span>
+                  ))}
+                  {hayFilasInvalidas && (
+                    <p className="text-xs text-muted">
+                      Cada concepto necesita un nombre y un monto entero mayor que 0. Completa o quita las filas incompletas para poder guardar.
+                    </p>
+                  )}
+                  <div className="flex items-center justify-between gap-2">
+                    <Button variante="secondary" tamano="sm" onClick={agregarFila} disabled={filas.length >= MAX_CONCEPTOS}>
+                      <Plus aria-hidden className="h-4 w-4" />
+                      Agregar concepto
+                    </Button>
+                    <span className="text-xs text-muted">
+                      {filas.length} de {MAX_CONCEPTOS}
+                    </span>
+                  </div>
+                  <p className="border-t border-line pt-3 text-sm font-semibold tabular-nums">Total: {clp(total)}</p>
+                  {errores.montoClp?.map((m) => (
+                    <span key={m} role="alert" className="block text-xs font-medium text-negative">
+                      {m}
+                    </span>
+                  ))}
+                </fieldset>
+              ) : (
+                <div className="space-y-3 sm:col-span-2">
+                  {descartaDesglose && (
+                    <Alert tono="warning">
+                      Al guardar se eliminarán los {conceptosPrevios} conceptos de este gasto y quedará como gasto simple. Vuelve a activar «Desglosar en conceptos» para conservarlos.
+                    </Alert>
+                  )}
+                  <FormField etiqueta="Monto (CLP)" requerido errores={errores.montoClp}>
+                    <Input name="montoClp" type="text" inputMode="numeric" required value={montoSimple} onChange={(e) => setMontoSimple(e.target.value)} />
+                  </FormField>
+                </div>
+              )}
+
+              <FormField etiqueta="Descripción (opcional)" className="sm:col-span-2">
+                <Input name="descripcion" type="text" defaultValue={formulario.movimiento?.descripcion ?? ""} />
+              </FormField>
+
+              {errorGeneral && (
+                <div className="sm:col-span-2">
+                  <Alert tono="error">{errorGeneral}</Alert>
+                </div>
+              )}
+              <div className="flex gap-2 sm:col-span-2">
+                <Button type="submit" cargando={enviando} disabled={desglosar && hayFilasInvalidas}>
+                  {enviando ? "Guardando…" : "Guardar"}
+                </Button>
+                <Button variante="secondary" onClick={() => setFormulario(null)} disabled={enviando}>
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          </CardBody>
+        </Card>
       )}
+
+      <Card>
+        <CardHeader titulo="Movimientos del mes" />
+        {listado.movimientos.length === 0 ? (
+          <EmptyState titulo="Sin movimientos en este mes" descripcion="Registra reparaciones, seguros, contribuciones u otros egresos de la propiedad." />
+        ) : (
+          <DataTable>
+            <thead>
+              <tr>
+                <Th>Fecha</Th>
+                <Th>Categoría</Th>
+                <Th>Descripción</Th>
+                <Th alinear="right">Total</Th>
+                <Th alinear="right">Acciones</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {listado.movimientos.map((m) => (
+                <Fragment key={m.id}>
+                  <tr>
+                    <Td className="whitespace-nowrap">{fecha(m.fecha)}</Td>
+                    <Td>
+                      <Badge>{ETIQUETA[m.categoria]}</Badge>
+                    </Td>
+                    <Td>
+                      {m.descripcion ?? "—"}
+                      {m.conceptos.length > 0 && (
+                        <details className="mt-1 text-xs text-muted">
+                          <summary className="inline-flex cursor-pointer items-center gap-1 font-medium text-brand">
+                            Desglosado en {m.conceptos.length} {m.conceptos.length === 1 ? "concepto" : "conceptos"}
+                            <ChevronDown aria-hidden className="h-3 w-3" />
+                          </summary>
+                          <ul className="mt-1 space-y-0.5">
+                            {m.conceptos.map((c) => (
+                              <li key={c.id} className="flex justify-between gap-4 tabular-nums">
+                                <span>{c.nombre}</span>
+                                <span>{clp(c.montoClp)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                    </Td>
+                    <Td numerico className="whitespace-nowrap font-medium">{clp(m.montoClp)}</Td>
+                    <Td alinear="right" className="whitespace-nowrap">
+                      <Button tamano="sm" variante="ghost" onClick={() => abrir(m)}>
+                        Editar
+                      </Button>
+                      <Button tamano="sm" variante="ghost" className="text-negative hover:text-negative" onClick={() => setAEliminar(m)}>
+                        Eliminar
+                      </Button>
+                    </Td>
+                  </tr>
+                </Fragment>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </Card>
+
+      <ConfirmDialog
+        abierto={aEliminar !== null}
+        titulo="Eliminar movimiento"
+        descripcion={
+          aEliminar
+            ? `Se eliminará el movimiento de ${clp(aEliminar.montoClp)} del ${fecha(aEliminar.fecha)}${aEliminar.conceptos.length > 0 ? ` (con ${aEliminar.conceptos.length} conceptos)` : ""}. Esta acción no se puede deshacer.`
+            : undefined
+        }
+        cargando={eliminando}
+        onCancelar={() => setAEliminar(null)}
+        onConfirmar={eliminar}
+      />
     </div>
   );
 }

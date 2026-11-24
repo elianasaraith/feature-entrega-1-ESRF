@@ -3,10 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CreditoDto } from "@/server/services/credito-service";
+import { Alert, Button, ButtonLink, FormField, Input } from "../../../_ui";
 
 type Props = { propiedadId: string; credito?: CreditoDto };
-
-const inputClass = "w-full rounded border px-2 py-1";
 
 export function CreditoForm({ propiedadId, credito }: Props) {
   const router = useRouter();
@@ -16,6 +15,7 @@ export function CreditoForm({ propiedadId, credito }: Props) {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (enviando) return;
     setEnviando(true);
     setErrores({});
     setErrorGeneral(null);
@@ -46,79 +46,84 @@ export function CreditoForm({ propiedadId, credito }: Props) {
   function campo(
     nombre: string,
     etiqueta: string,
-    opciones: { type?: string; requerido?: boolean; valor?: string | number | null } = {}
+    opciones: {
+      type?: string;
+      requerido?: boolean;
+      valor?: string | number | null;
+      ayuda?: string;
+    } = {}
   ) {
     return (
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">{etiqueta}</span>
-        <input
+      <FormField
+        etiqueta={etiqueta}
+        errores={errores[nombre]}
+        requerido={opciones.requerido}
+        ayuda={opciones.ayuda}
+      >
+        <Input
           name={nombre}
           type={opciones.type ?? "text"}
           inputMode={opciones.type ? undefined : "decimal"}
           required={opciones.requerido}
           defaultValue={opciones.valor ?? ""}
-          className={inputClass}
+          aria-invalid={errores[nombre] ? true : undefined}
         />
-        {errores[nombre]?.map((mensaje) => (
-          <span key={mensaje} className="block text-red-600">
-            {mensaje}
-          </span>
-        ))}
-      </label>
+      </FormField>
     );
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Banco</span>
-        <input
+      <FormField etiqueta="Banco" errores={errores.banco} requerido>
+        <Input
           name="banco"
           type="text"
           required
           defaultValue={credito?.banco ?? ""}
-          className={inputClass}
+          aria-invalid={errores.banco ? true : undefined}
         />
-        {errores.banco?.map((mensaje) => (
-          <span key={mensaje} className="block text-red-600">
-            {mensaje}
-          </span>
-        ))}
-      </label>
-      {campo("cuotaContractualUf", "Cuota contractual (UF)", {
-        requerido: true,
-        valor: credito?.cuotaContractualUf,
-      })}
-      {campo("tasaInteresAnual", "Tasa de interés anual (%)", {
-        requerido: true,
-        valor: credito?.tasaInteresAnual,
-      })}
-      {campo("numeroCuotasTotal", "Número total de cuotas", {
-        type: "number",
-        requerido: true,
-        valor: credito?.numeroCuotasTotal,
-      })}
-      {campo("diaVencimiento", "Día de vencimiento (1–31)", {
-        type: "number",
-        requerido: true,
-        valor: credito?.diaVencimiento,
-      })}
-      {campo("numeroCredito", "Número de crédito (opcional)", { type: "text", valor: credito?.numeroCredito })}
-      {campo("fechaOtorgamiento", "Fecha de otorgamiento (opcional)", {
-        type: "date",
-        valor: credito?.fechaOtorgamiento,
-      })}
-      {campo("montoOriginalUf", "Monto original (UF, opcional)", { valor: credito?.montoOriginalUf })}
-      {campo("segurosUf", "Seguros (UF, opcional)", { valor: credito?.segurosUf })}
-      {campo("saldoInicialUf", "Saldo inicial (UF, opcional)", { valor: credito?.saldoInicialUf })}
-      {errorGeneral && <p className="text-red-600">{errorGeneral}</p>}
-      <button
-        type="submit"
-        disabled={enviando}
-        className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-      >
-        {enviando ? "Guardando…" : "Guardar"}
-      </button>
+      </FormField>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {campo("cuotaContractualUf", "Cuota contractual (UF)", {
+          requerido: true,
+          valor: credito?.cuotaContractualUf,
+        })}
+        {campo("tasaInteresAnual", "Tasa de interés anual (%)", {
+          requerido: true,
+          valor: credito?.tasaInteresAnual,
+        })}
+        {campo("numeroCuotasTotal", "Número total de cuotas", {
+          type: "number",
+          requerido: true,
+          valor: credito?.numeroCuotasTotal,
+        })}
+        {campo("diaVencimiento", "Día de vencimiento (1–31)", {
+          type: "number",
+          requerido: true,
+          valor: credito?.diaVencimiento,
+        })}
+        {campo("numeroCredito", "Número de crédito (opcional)", { type: "text", valor: credito?.numeroCredito })}
+        {campo("fechaOtorgamiento", "Fecha de otorgamiento (opcional)", {
+          type: "date",
+          valor: credito?.fechaOtorgamiento,
+        })}
+        {campo("montoOriginalUf", "Monto original (UF, opcional)", { valor: credito?.montoOriginalUf })}
+        {campo("segurosUf", "Seguros (UF, opcional)", { valor: credito?.segurosUf })}
+        {campo("saldoInicialUf", "Saldo inicial (UF, opcional)", { valor: credito?.saldoInicialUf })}
+        {campo("porcentajePie", "Porcentaje de pie (%)", {
+          valor: credito?.porcentajePie,
+          ayuda: "Porcentaje del valor de compra aportado como pago inicial.",
+        })}
+      </div>
+      {errorGeneral && <Alert tono="error">{errorGeneral}</Alert>}
+      <div className="flex gap-2">
+        <Button type="submit" cargando={enviando}>
+          {enviando ? "Guardando…" : "Guardar"}
+        </Button>
+        <ButtonLink href={`/propiedades/${propiedadId}/credito`} variante="secondary">
+          Cancelar
+        </ButtonLink>
+      </div>
     </form>
   );
 }

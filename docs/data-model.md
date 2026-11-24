@@ -120,6 +120,7 @@ erDiagram
         numeric seguros_uf "NULL - 12,4"
         smallint dia_vencimiento "NOT NULL - 1 a 31"
         numeric saldo_inicial_uf "NULL - 12,4"
+        numeric porcentaje_pie "NULL - 5,2 - 0 a 100"
         timestamptz created_at "NOT NULL"
         timestamptz updated_at "NOT NULL"
     }
@@ -315,7 +316,15 @@ crédito es válida (HU01 CL10).
 | `seguros_uf` | `NUMERIC(12,4)` | Sí | `>= 0` | Seguros asociados a la cuota, en UF |
 | `dia_vencimiento` | `SMALLINT` | No | `BETWEEN 1 AND 31` | Día de vencimiento de la cuota |
 | `saldo_inicial_uf` | `NUMERIC(12,4)` | Sí | `>= 0` | Saldo informado al registrar el crédito |
+| `porcentaje_pie` | `NUMERIC(5,2)` | Sí | `BETWEEN 0 AND 100` | Pie declarado: porcentaje del valor de compra aportado como pago inicial. `NULL` = no informado; `0` es un valor válido distinto |
 | `created_at`, `updated_at` | `TIMESTAMPTZ` | No | | |
+
+**`porcentaje_pie` es un dato informado, no derivado.** No se deduce del `monto_original_uf`
+(el porcentaje financiado por el banco puede diferir del complemento del pie), no altera montos
+contractuales, dividendos, saldos, UF, pagos ni dashboard, y el pie no es un egreso mensual. El monto
+estimado del pie se calcula al consultar (valor de compra de la propiedad × porcentaje / 100, en la
+moneda original del valor de compra) y no se persiste. Migración no destructiva: columna nullable
+sin `DEFAULT`; los créditos existentes quedan en `NULL`.
 
 **No existe columna de saldo vigente.** El saldo actual se deriva del registro mensual más
 reciente (§6). Una columna `saldo_actual` sería un segundo lugar donde la verdad puede

@@ -1,17 +1,15 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NotFoundError } from "@/server/errors";
 import { arrendatarioService, propiedadService } from "@/server/services";
+import { LoadingState, PageHeader } from "../../../../_ui";
 import { ContratoForm } from "../contrato-form";
 
 export default function NuevoContratoPage({ params }: { params: Promise<{ id: string }> }) {
   return (
-    <main className="mx-auto w-full max-w-2xl p-6">
-      <Suspense fallback={<p>Cargando…</p>}>
-        <NuevoContrato params={params} />
-      </Suspense>
-    </main>
+    <Suspense fallback={<LoadingState />}>
+      <NuevoContrato params={params} />
+    </Suspense>
   );
 }
 
@@ -25,12 +23,16 @@ async function NuevoContrato({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <>
-      <Link href={`/propiedades/${propiedad.id}/contratos`} className="text-sm underline">
-        ← Contratos
-      </Link>
-      <h1 className="my-4 text-2xl font-semibold">
-        Nuevo contrato · departamento {propiedad.numeroDepartamento}
-      </h1>
+      <PageHeader
+        titulo="Nuevo contrato"
+        descripcion={`Departamento ${propiedad.numeroDepartamento}`}
+        migas={[
+          { etiqueta: "Propiedades", href: "/propiedades" },
+          { etiqueta: `Depto ${propiedad.numeroDepartamento}`, href: `/propiedades/${propiedad.id}` },
+          { etiqueta: "Contratos", href: `/propiedades/${propiedad.id}/contratos` },
+          { etiqueta: "Nuevo" },
+        ]}
+      />
       <ContratoForm propiedadId={propiedad.id} arrendatarios={arrendatarios} />
     </>
   );

@@ -6,6 +6,8 @@ import type { CreditoInput } from "@/server/schemas/credito";
 import { calcularEquivalenteClp } from "@/server/uf/equivalente";
 import type { EquivalenteClpDto } from "@/server/uf/equivalente";
 import type { UfService, ValorUfDto } from "@/server/uf/uf-service";
+import { calcularPieEstimado } from "@/server/domain/credito-pie";
+import type { PieEstimadoDto } from "@/server/domain/credito-pie";
 import { createCreditoRegistroService } from "./credito-registro-service";
 import type { UltimoSaldoDto } from "./credito-registro-service";
 import {
@@ -26,6 +28,7 @@ export type CreditoDto = {
   segurosUf: string | null;
   diaVencimiento: number;
   saldoInicialUf: string | null;
+  porcentajePie: string | null; // 0..100; null = no informado (distinto de "0")
   createdAt: string;
   updatedAt: string;
 };
@@ -37,6 +40,7 @@ export type CreditoConEquivalentesDto = CreditoDto & {
   cuotaContractualClp: EquivalenteClpDto; // UF del mes actual
   saldoInicialClp: EquivalenteClpDto; // UF del mes de fechaOtorgamiento
   ultimoSaldo: UltimoSaldoConEquivalenteDto | null; // UF del período del registro
+  pieEstimado: PieEstimadoDto | null; // null si porcentajePie es null
 };
 
 // Decimal → texto: nunca pasa por Number.
@@ -54,6 +58,7 @@ function toDto(c: CreditoHipotecario): CreditoDto {
     segurosUf: c.segurosUf?.toString() ?? null,
     diaVencimiento: c.diaVencimiento,
     saldoInicialUf: c.saldoInicialUf?.toString() ?? null,
+    porcentajePie: c.porcentajePie?.toString() ?? null,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
   };
@@ -121,8 +126,24 @@ export function createCreditoService(prisma: PrismaClient, uf?: UfService) {
       if (ultimo) periodos.push(ultimo.periodo);
       const valores = await resolverUf(periodos);
 
+      // El pie se estima sobre el valor de compra registrado, en su moneda original.
+      const propiedad =
+        credito.porcentajePie === null
+          ? null
+          : await prisma.propiedad.findUnique({
+              where: { id: propiedadId },
+              select: { valorCompraMonto: true, valorCompraMoneda: true },
+            });
+
       return {
         ...credito,
+        pieEstimado: propiedad
+          ? calcularPieEstimado(
+              propiedad.valorCompraMonto.toString(),
+              propiedad.valorCompraMoneda,
+              credito.porcentajePie
+            )
+          : null,
         cuotaContractualClp: calcularEquivalenteClp(
           credito.cuotaContractualUf,
           valores.get(periodoActual)

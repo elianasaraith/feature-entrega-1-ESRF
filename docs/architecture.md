@@ -399,6 +399,10 @@ casos se documenta el motivo junto a la consulta.
 SQL crudo **no es una regla arquitectónica**: es una herramienta que se justifica caso a
 caso.
 
+> **Nota (change `porcentaje-pie-hipotecario`, implementado).** `credito_hipotecario.porcentaje_pie`
+> es un dato informado; el monto estimado del pie es una función pura calculada al consultar
+> (`server/domain/credito-pie.ts`) y no se persiste. No hay saldo ni equivalente persistido.
+
 ### 10.3 Prohibiciones heredadas del modelo de datos
 
 Ninguna de estas existe, y ninguna debe introducirse:

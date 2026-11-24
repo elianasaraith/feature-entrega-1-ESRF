@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Alert, Button, ButtonLink, Card, CardBody, FormField, Input, Select, Textarea } from "../../../_ui";
 import type { ArrendatarioDto } from "@/server/services/arrendatario-service";
 import type { ContratoDto } from "@/server/services/contrato-service";
 
@@ -10,8 +11,6 @@ type Props = {
   arrendatarios: ArrendatarioDto[];
   contrato?: ContratoDto;
 };
-
-const inputClass = "w-full rounded border px-2 py-1";
 
 // Alta (POST; arrendatario existente o nuevo; monto inicial opcional) o edición
 // (PUT; cuerpo completo, arrendatario existente, sin monto: reajustes son T05).
@@ -74,115 +73,96 @@ export function ContratoForm({ propiedadId, arrendatarios, contrato }: Props) {
     }
   }
 
-  const mensajes = (nombre: string) =>
-    errores[nombre]?.map((mensaje) => (
-      <span key={mensaje} className="block text-red-600">
-        {mensaje}
-      </span>
-    ));
+  const radio = "flex cursor-pointer items-center gap-2 text-sm font-medium text-ink";
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      {!contrato && (
-        <div className="flex gap-4 text-sm">
-          <label>
-            <input type="radio" checked={!nuevo} onChange={() => setNuevo(false)} /> Arrendatario existente
-          </label>
-          <label>
-            <input type="radio" checked={nuevo} onChange={() => setNuevo(true)} /> Arrendatario nuevo
-          </label>
-        </div>
-      )}
-      {nuevo && !contrato ? (
-        <>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Nombre del arrendatario</span>
-            <input name="arrNombre" type="text" required className={inputClass} />
-            {mensajes("arrendatario.nombre")}
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">RUT (opcional)</span>
-            <input name="arrRut" type="text" className={inputClass} />
-            {mensajes("arrendatario.rut")}
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Email (opcional)</span>
-            <input name="arrEmail" type="text" className={inputClass} />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Teléfono (opcional)</span>
-            <input name="arrTelefono" type="text" className={inputClass} />
-          </label>
-        </>
-      ) : (
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Arrendatario</span>
-          <select
-            name="arrendatarioId"
-            required
-            defaultValue={contrato?.arrendatario.id ?? ""}
-            className={inputClass}
+    <form onSubmit={onSubmit} className="max-w-2xl space-y-6">
+      <Card>
+        <CardBody className="space-y-4">
+          <h2 className="text-base font-semibold text-ink">Arrendatario</h2>
+          {!contrato && (
+            <div role="radiogroup" aria-label="Tipo de arrendatario" className="flex flex-wrap gap-6">
+              <label className={radio}>
+                <input type="radio" name="tipoArr" checked={!nuevo} onChange={() => setNuevo(false)} /> Existente
+              </label>
+              <label className={radio}>
+                <input type="radio" name="tipoArr" checked={nuevo} onChange={() => setNuevo(true)} /> Nuevo
+              </label>
+            </div>
+          )}
+          {nuevo && !contrato ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField etiqueta="Nombre del arrendatario" requerido errores={errores["arrendatario.nombre"]} className="sm:col-span-2">
+                <Input name="arrNombre" type="text" required />
+              </FormField>
+              <FormField etiqueta="RUT (opcional)" errores={errores["arrendatario.rut"]}>
+                <Input name="arrRut" type="text" />
+              </FormField>
+              <FormField etiqueta="Teléfono (opcional)">
+                <Input name="arrTelefono" type="text" />
+              </FormField>
+              <FormField etiqueta="Email (opcional)" className="sm:col-span-2">
+                <Input name="arrEmail" type="text" />
+              </FormField>
+            </div>
+          ) : (
+            <FormField etiqueta="Arrendatario" requerido errores={errores.arrendatarioId}>
+              <Select name="arrendatarioId" required defaultValue={contrato?.arrendatario.id ?? ""}>
+                <option value="" disabled>
+                  Seleccione…
+                </option>
+                {arrendatarios.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.nombre}
+                    {a.rut ? ` (${a.rut})` : ""}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardBody className="grid gap-4 sm:grid-cols-2">
+          <h2 className="text-base font-semibold text-ink sm:col-span-2">Condiciones del contrato</h2>
+          <FormField etiqueta="Fecha de inicio" requerido errores={errores.fechaInicio}>
+            <Input name="fechaInicio" type="date" required defaultValue={contrato?.fechaInicio ?? ""} />
+          </FormField>
+          <FormField etiqueta="Fecha de término" requerido errores={errores.fechaTermino}>
+            <Input name="fechaTermino" type="date" required defaultValue={contrato?.fechaTermino ?? ""} />
+          </FormField>
+          <FormField etiqueta="Día esperado de pago (1 a 31)" requerido errores={errores.diaEsperadoPago}>
+            <Input name="diaEsperadoPago" type="number" min={1} max={31} required defaultValue={contrato?.diaEsperadoPago ?? ""} />
+          </FormField>
+          {!contrato && (
+            <FormField etiqueta="Monto mensual inicial (CLP, opcional)" errores={errores.montoMensualClp}>
+              <Input name="montoMensualClp" type="text" inputMode="numeric" />
+            </FormField>
+          )}
+          <FormField
+            etiqueta="Garantía (CLP, opcional)"
+            ayuda="Dato contractual, no constituye ingreso."
+            errores={errores.garantiaClp}
+            className="sm:col-span-2"
           >
-            <option value="" disabled>
-              Seleccione…
-            </option>
-            {arrendatarios.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.nombre}
-                {a.rut ? ` (${a.rut})` : ""}
-              </option>
-            ))}
-          </select>
-          {mensajes("arrendatarioId")}
-        </label>
-      )}
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Fecha de inicio</span>
-        <input name="fechaInicio" type="date" required defaultValue={contrato?.fechaInicio ?? ""} className={inputClass} />
-        {mensajes("fechaInicio")}
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Fecha de término</span>
-        <input name="fechaTermino" type="date" required defaultValue={contrato?.fechaTermino ?? ""} className={inputClass} />
-        {mensajes("fechaTermino")}
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Día esperado de pago (1 a 31)</span>
-        <input
-          name="diaEsperadoPago"
-          type="number"
-          min={1}
-          max={31}
-          required
-          defaultValue={contrato?.diaEsperadoPago ?? ""}
-          className={inputClass}
-        />
-        {mensajes("diaEsperadoPago")}
-      </label>
-      {!contrato && (
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Monto mensual inicial (CLP, opcional)</span>
-          <input name="montoMensualClp" type="text" inputMode="numeric" className={inputClass} />
-          {mensajes("montoMensualClp")}
-        </label>
-      )}
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Garantía (CLP, opcional; dato contractual, no ingreso)</span>
-        <input name="garantiaClp" type="text" inputMode="numeric" defaultValue={contrato?.garantiaClp ?? ""} className={inputClass} />
-        {mensajes("garantiaClp")}
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Observaciones (opcional)</span>
-        <textarea name="observaciones" defaultValue={contrato?.observaciones ?? ""} className={inputClass} />
-      </label>
-      {errorGeneral && <p className="text-red-600">{errorGeneral}</p>}
-      <button
-        type="submit"
-        disabled={enviando}
-        className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-      >
-        {enviando ? "Guardando…" : "Guardar"}
-      </button>
+            <Input name="garantiaClp" type="text" inputMode="numeric" defaultValue={contrato?.garantiaClp ?? ""} />
+          </FormField>
+          <FormField etiqueta="Observaciones (opcional)" className="sm:col-span-2">
+            <Textarea name="observaciones" rows={3} defaultValue={contrato?.observaciones ?? ""} />
+          </FormField>
+        </CardBody>
+      </Card>
+
+      {errorGeneral && <Alert tono="error">{errorGeneral}</Alert>}
+      <div className="flex gap-2">
+        <Button type="submit" cargando={enviando}>
+          {enviando ? "Guardando…" : "Guardar"}
+        </Button>
+        <ButtonLink href={`/propiedades/${propiedadId}/contratos`} variante="secondary">
+          Cancelar
+        </ButtonLink>
+      </div>
     </form>
   );
 }

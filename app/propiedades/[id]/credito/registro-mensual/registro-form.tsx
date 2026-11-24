@@ -3,10 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { RegistroMensualDto } from "@/server/services/credito-registro-service";
+import { Alert, Button, ButtonLink, FormField, Input } from "../../../../_ui";
 
 type Props = { propiedadId: string; registro?: RegistroMensualDto };
-
-const inputClass = "w-full rounded border px-2 py-1";
 
 // Alta (POST, con período) o edición (PUT, período fijo y datos precargados).
 // La edición envía siempre el cuerpo completo.
@@ -20,6 +19,7 @@ export function RegistroForm({ propiedadId, registro }: Props) {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (enviando) return;
     setEnviando(true);
     setErrores({});
     setErrorGeneral(null);
@@ -49,72 +49,63 @@ export function RegistroForm({ propiedadId, registro }: Props) {
     }
   }
 
-  const mensajes = (nombre: string) =>
-    errores[nombre]?.map((mensaje) => (
-      <span key={mensaje} className="block text-red-600">
-        {mensaje}
-      </span>
-    ));
-
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Período (mensualidad hipotecaria)</span>
-        <input
+      <FormField etiqueta="Período (mensualidad hipotecaria)" errores={errores.periodo} requerido>
+        <Input
           name="periodo"
           type="month"
           required
           readOnly={Boolean(registro)}
           defaultValue={registro?.periodo ?? ""}
-          className={inputClass}
+          aria-invalid={errores.periodo ? true : undefined}
         />
-        {mensajes("periodo")}
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Dividendo pagado (CLP, opcional)</span>
-        <input
+      </FormField>
+      <FormField etiqueta="Dividendo pagado (CLP, opcional)" errores={errores.dividendoPagadoClp}>
+        <Input
           name="dividendoPagadoClp"
           type="text"
           inputMode="numeric"
           value={dividendo}
           onChange={(e) => setDividendo(e.target.value)}
-          className={inputClass}
+          aria-invalid={errores.dividendoPagadoClp ? true : undefined}
         />
-        {mensajes("dividendoPagadoClp")}
-      </label>
+      </FormField>
       {dividendo.trim() !== "" && (
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Fecha de pago del dividendo</span>
-          <input
+        <FormField etiqueta="Fecha de pago del dividendo" errores={errores.fechaPagoDividendo} requerido>
+          <Input
             name="fechaPagoDividendo"
             type="date"
             required
             defaultValue={registro?.fechaPagoDividendo ?? ""}
-            className={inputClass}
+            aria-invalid={errores.fechaPagoDividendo ? true : undefined}
           />
-          {mensajes("fechaPagoDividendo")}
-        </label>
+        </FormField>
       )}
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Saldo pendiente informado por el banco (UF, opcional)</span>
-        <input
+      <FormField etiqueta="Saldo pendiente informado por el banco (UF, opcional)" errores={errores.saldoPendienteUf}>
+        <Input
           name="saldoPendienteUf"
           type="text"
           inputMode="decimal"
           defaultValue={registro?.saldoPendienteUf ?? ""}
-          className={inputClass}
+          aria-invalid={errores.saldoPendienteUf ? true : undefined}
         />
-        {mensajes("saldoPendienteUf")}
-      </label>
-      {dividendo.trim() === "" && mensajes("fechaPagoDividendo")}
-      {errorGeneral && <p className="text-red-600">{errorGeneral}</p>}
-      <button
-        type="submit"
-        disabled={enviando}
-        className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-      >
-        {enviando ? "Guardando…" : "Guardar"}
-      </button>
+      </FormField>
+      {dividendo.trim() === "" &&
+        errores.fechaPagoDividendo?.map((mensaje) => (
+          <p key={mensaje} role="alert" className="text-xs font-medium text-negative">
+            {mensaje}
+          </p>
+        ))}
+      {errorGeneral && <Alert tono="error">{errorGeneral}</Alert>}
+      <div className="flex gap-2">
+        <Button type="submit" cargando={enviando}>
+          {enviando ? "Guardando…" : "Guardar"}
+        </Button>
+        <ButtonLink href={`/propiedades/${propiedadId}/credito/registro-mensual`} variante="secondary">
+          Cancelar
+        </ButtonLink>
+      </div>
     </form>
   );
 }

@@ -139,6 +139,8 @@ test("los CHECK de PostgreSQL rechazan datos que eludan Zod", { skip }, async ()
     { montoOriginalUf: "0" },
     { segurosUf: "-1" },
     { saldoInicialUf: "-1" },
+    { porcentajePie: "-0.01" },
+    { porcentajePie: "100.01" },
   ];
   for (const extra of invalidos) {
     await assert.rejects(prisma.creditoHipotecario.create({ data: { ...base, ...extra } }), (e) => {
@@ -153,4 +155,23 @@ test("la FK Restrict impide borrar una propiedad con crédito", { skip }, async 
   const id = await nuevaPropiedad();
   await service.crear(id, input());
   await assert.rejects(prisma.propiedad.delete({ where: { id } }));
+});
+
+test("porcentaje de pie: round-trip, 0 distinto de null, edición, quitar y CHECK 0..100", { skip }, async () => {
+  const id = await nuevaPropiedad();
+  const creado = await service.crear(id, input({ porcentajePie: "20.5" }));
+  assert.equal(creado.porcentajePie, "20.5");
+  assert.equal((await service.actualizar(id, input({ porcentajePie: "0" }))).porcentajePie, "0");
+  assert.equal((await service.actualizar(id, input({ porcentajePie: "100" }))).porcentajePie, "100");
+  const consulta = await service.obtenerConEquivalentes(id);
+  assert.equal(consulta.pieEstimado?.montoEstimado, "2000.0000"); // valor de compra 2000 UF
+  assert.equal((await service.actualizar(id, input())).porcentajePie, null);
+  assert.equal((await service.obtenerConEquivalentes(id)).pieEstimado, null);
+  // Los límites válidos 0 y 100 y el null los acepta la BD; fuera de rango, no.
+  for (const v of ["0.00", "100.00"]) {
+    await prisma.creditoHipotecario.updateMany({ where: { propiedadId: id }, data: { porcentajePie: v } });
+  }
+  await assert.rejects(
+    prisma.creditoHipotecario.updateMany({ where: { propiedadId: id }, data: { porcentajePie: "100.01" } })
+  );
 });

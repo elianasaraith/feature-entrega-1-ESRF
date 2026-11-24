@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { clp } from "../../../../../_lib/format";
+import { Alert, Button, Card, CardBody, CardHeader, ConfirmDialog, DataTable, EmptyState, FormField, Input, Td, Th } from "../../../../../_ui";
 import type { MontoDto } from "@/server/services/contrato-service";
 
 type Props = {
@@ -12,8 +14,6 @@ type Props = {
   montos: MontoDto[];
   montoVigenteClp: string | null;
 };
-
-const inputClass = "w-full rounded border px-2 py-1";
 
 // Historial de montos, alta del primer monto o de un reajuste, y sincronización
 // explícita de pagos esperados. Todo cálculo ocurre en el servidor.
@@ -35,11 +35,14 @@ export function MontosPanel({
   const [resultado, setResultado] = useState<string | null>(null);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [errorFila, setErrorFila] = useState<string | null>(null);
+  const [aEliminar, setAEliminar] = useState<MontoDto | null>(null);
+  const [procesando, setProcesando] = useState(false);
 
   // Corrección (PUT) o eliminación (DELETE) de una fila. El servidor decide: si hay
   // abonos en el rango responde 422 y no cambia nada.
   async function modificarMonto(montoId: string, metodo: "PUT" | "DELETE", monto?: string) {
     setErrorFila(null);
+    setProcesando(true);
     try {
       const respuesta = await fetch(`${base}/montos/${montoId}`, {
         method: metodo,
@@ -52,14 +55,19 @@ export function MontosPanel({
         return;
       }
       setEditandoId(null);
+      setAEliminar(null);
       router.refresh();
     } catch {
       setErrorFila("No se pudo modificar el monto");
+    } finally {
+      setProcesando(false);
+      setAEliminar(null);
     }
   }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (enviando) return;
     const formulario = event.currentTarget;
     setEnviando(true);
     setErrores({});
@@ -109,145 +117,131 @@ export function MontosPanel({
     }
   }
 
-  const mensajes = (nombre: string) =>
-    errores[nombre]?.map((mensaje) => (
-      <span key={mensaje} className="block text-red-600">
-        {mensaje}
-      </span>
-    ));
-
   return (
     <div className="space-y-6">
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">Historial de montos</h2>
+      <Card>
+        <CardHeader
+          titulo="Historial de montos"
+          descripcion={!primero ? <>Monto vigente este mes: <strong className="text-ink">{montoVigenteClp ? `${clp(montoVigenteClp)} CLP` : "—"}</strong></> : undefined}
+        />
         {primero ? (
-          <p className="text-sm">Este contrato aún no tiene monto registrado.</p>
+          <EmptyState titulo="Sin monto registrado" descripcion="Este contrato aún no tiene monto. Registre el primero más abajo." />
         ) : (
           <>
-            <p className="mb-2 text-sm">
-              Monto vigente este mes: <strong>{montoVigenteClp ?? "—"} CLP</strong>
-            </p>
-            <table className="w-full text-sm">
+            <DataTable>
               <thead>
-                <tr className="text-left">
-                  <th className="py-1">Rige desde</th>
-                  <th>Monto (CLP)</th>
-                  <th>Motivo</th>
-                  <th>Acciones</th>
+                <tr>
+                  <Th>Rige desde</Th>
+                  <Th alinear="right">Monto (CLP)</Th>
+                  <Th>Motivo</Th>
+                  <Th alinear="right">Acciones</Th>
                 </tr>
               </thead>
               <tbody>
                 {montos.map((m) => (
-                  <tr key={m.id} className="border-t">
-                    <td className="py-1">{m.vigenteDesdePeriodo.slice(0, 7)}</td>
-                    <td>
+                  <tr key={m.id}>
+                    <Td className="whitespace-nowrap">{m.vigenteDesdePeriodo.slice(0, 7)}</Td>
+                    <Td numerico>
                       {editandoId === m.id ? (
                         <form
-                          className="flex gap-2"
+                          className="flex items-center justify-end gap-2"
                           onSubmit={(e) => {
                             e.preventDefault();
                             const nuevo = new FormData(e.currentTarget).get("monto");
                             void modificarMonto(m.id, "PUT", String(nuevo ?? ""));
                           }}
                         >
-                          <input name="monto" type="text" inputMode="numeric" defaultValue={m.montoMensualClp} className="w-32 rounded border px-2 py-1" />
-                          <button type="submit" className="underline">
+                          <Input name="monto" type="text" inputMode="numeric" aria-label="Nuevo monto (CLP)" defaultValue={m.montoMensualClp} className="w-32" />
+                          <Button type="submit" tamano="sm" cargando={procesando}>
                             Guardar
-                          </button>
-                          <button type="button" onClick={() => setEditandoId(null)} className="underline">
+                          </Button>
+                          <Button type="button" tamano="sm" variante="ghost" onClick={() => setEditandoId(null)} disabled={procesando}>
                             Cancelar
-                          </button>
+                          </Button>
                         </form>
                       ) : (
-                        m.montoMensualClp
+                        clp(m.montoMensualClp)
                       )}
-                    </td>
-                    <td>{m.motivo ?? "—"}</td>
-                    <td>
-                      <button type="button" onClick={() => setEditandoId(m.id)} className="underline">
+                    </Td>
+                    <Td>{m.motivo ?? "—"}</Td>
+                    <Td alinear="right" className="whitespace-nowrap">
+                      <Button tamano="sm" variante="ghost" onClick={() => { setErrorFila(null); setEditandoId(m.id); }}>
                         Corregir
-                      </button>
+                      </Button>
                       {m !== montos[0] && (
-                        <button
-                          type="button"
-                          className="ml-3 underline"
-                          onClick={() => {
-                            if (window.confirm(`¿Eliminar el reajuste de ${m.vigenteDesdePeriodo.slice(0, 7)}?`)) {
-                              void modificarMonto(m.id, "DELETE");
-                            }
-                          }}
-                        >
+                        <Button tamano="sm" variante="ghost" className="text-negative hover:text-negative" onClick={() => setAEliminar(m)}>
                           Eliminar
-                        </button>
+                        </Button>
                       )}
-                    </td>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
             {errorFila && (
-              <p role="alert" className="mt-2 text-sm text-red-600">
-                {errorFila}
-              </p>
+              <div className="p-4">
+                <Alert tono="error">{errorFila}</Alert>
+              </div>
             )}
           </>
         )}
-      </section>
+      </Card>
 
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">
-          {primero ? "Registrar primer monto" : "Registrar reajuste"}
-        </h2>
-        <form onSubmit={onSubmit} className="space-y-3">
-          {primero ? (
-            <p className="text-sm">Regirá desde {fechaInicio.slice(0, 7)} (mes de inicio del contrato).</p>
-          ) : (
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium">
-                Rige desde (mes, entre {fechaInicio.slice(0, 7)} y {fechaTermino.slice(0, 7)})
-              </span>
-              <input name="vigenteDesdePeriodo" type="month" required className={inputClass} />
-              {mensajes("vigenteDesdePeriodo")}
-            </label>
-          )}
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Monto mensual (CLP)</span>
-            <input name="montoMensualClp" type="text" inputMode="numeric" required className={inputClass} />
-            {mensajes("montoMensualClp")}
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Motivo (opcional)</span>
-            <input name="motivo" type="text" className={inputClass} />
-          </label>
-          <button
-            type="submit"
-            disabled={enviando}
-            className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-          >
-            {enviando ? "Guardando…" : "Guardar"}
-          </button>
-        </form>
-      </section>
+      <Card>
+        <CardHeader titulo={primero ? "Registrar primer monto" : "Registrar reajuste"} />
+        <CardBody>
+          <form onSubmit={onSubmit} className="grid max-w-2xl gap-4 sm:grid-cols-2">
+            {primero ? (
+              <p className="text-sm text-muted sm:col-span-2">Regirá desde {fechaInicio.slice(0, 7)} (mes de inicio del contrato).</p>
+            ) : (
+              <FormField
+                etiqueta="Rige desde (mes)"
+                requerido
+                ayuda={`Entre ${fechaInicio.slice(0, 7)} y ${fechaTermino.slice(0, 7)}`}
+                errores={errores.vigenteDesdePeriodo}
+              >
+                <Input name="vigenteDesdePeriodo" type="month" required />
+              </FormField>
+            )}
+            <FormField etiqueta="Monto mensual (CLP)" requerido errores={errores.montoMensualClp}>
+              <Input name="montoMensualClp" type="text" inputMode="numeric" required />
+            </FormField>
+            <FormField etiqueta="Motivo (opcional)" className="sm:col-span-2">
+              <Input name="motivo" type="text" />
+            </FormField>
+            <div className="sm:col-span-2">
+              <Button type="submit" cargando={enviando}>
+                {enviando ? "Guardando…" : "Guardar"}
+              </Button>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
 
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">Pagos esperados</h2>
-        <p className="mb-2 text-sm">
-          Crea los pagos esperados que faltan, desde el inicio del contrato hasta el mes en curso.
-          Se puede repetir sin efectos duplicados.
-        </p>
-        <button
-          type="button"
-          onClick={sincronizar}
-          disabled={sincronizando || primero}
-          className="rounded border px-4 py-2 text-sm disabled:opacity-50"
-        >
-          {sincronizando ? "Sincronizando…" : "Sincronizar pagos esperados"}
-        </button>
-        {primero && <p className="mt-1 text-sm">Registre primero el monto del contrato.</p>}
-        {resultado && <p className="mt-2 text-sm">{resultado}</p>}
-      </section>
+      <Card>
+        <CardHeader
+          titulo="Pagos esperados"
+          descripcion="Crea los pagos esperados que faltan, desde el inicio del contrato hasta el mes en curso. Se puede repetir sin efectos duplicados."
+        />
+        <CardBody className="space-y-3">
+          <Button variante="secondary" onClick={sincronizar} cargando={sincronizando} disabled={primero}>
+            {sincronizando ? "Sincronizando…" : "Sincronizar pagos esperados"}
+          </Button>
+          {primero && <p className="text-sm text-muted">Registre primero el monto del contrato.</p>}
+          {resultado && <Alert tono="success">{resultado}</Alert>}
+        </CardBody>
+      </Card>
 
-      {errorGeneral && <p className="text-red-600">{errorGeneral}</p>}
+      {errorGeneral && <Alert tono="error">{errorGeneral}</Alert>}
+
+      <ConfirmDialog
+        abierto={aEliminar !== null}
+        titulo="Eliminar reajuste"
+        descripcion={aEliminar ? `Se eliminará el reajuste de ${aEliminar.vigenteDesdePeriodo.slice(0, 7)}. Si existen abonos en ese rango, la operación será rechazada.` : undefined}
+        cargando={procesando}
+        onCancelar={() => setAEliminar(null)}
+        onConfirmar={() => aEliminar && void modificarMonto(aEliminar.id, "DELETE")}
+      />
     </div>
   );
 }

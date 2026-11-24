@@ -1,14 +1,18 @@
-import Link from "next/link";
+import { Card, CardBody, PageHeader } from "../../_ui";
 import { PropiedadForm } from "../propiedad-form";
 
 export default function NuevaPropiedadPage() {
   return (
-    <main className="mx-auto w-full max-w-2xl p-6">
-      <Link href="/propiedades" className="text-sm underline">
-        ← Propiedades
-      </Link>
-      <h1 className="my-4 text-2xl font-semibold">Nueva propiedad</h1>
-      <PropiedadForm />
-    </main>
+    <div className="max-w-2xl">
+      <PageHeader
+        titulo="Nueva propiedad"
+        migas={[{ etiqueta: "Propiedades", href: "/propiedades" }, { etiqueta: "Nueva" }]}
+      />
+      <Card>
+        <CardBody>
+          <PropiedadForm />
+        </CardBody>
+      </Card>
+    </div>
   );
 }

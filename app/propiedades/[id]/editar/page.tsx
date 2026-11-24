@@ -1,8 +1,8 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NotFoundError } from "@/server/errors";
 import { propiedadService } from "@/server/services";
+import { Card, CardBody, LoadingState, PageHeader } from "../../../_ui";
 import { PropiedadForm } from "../../propiedad-form";
 
 export default function EditarPropiedadPage({
@@ -11,11 +11,9 @@ export default function EditarPropiedadPage({
   params: Promise<{ id: string }>;
 }) {
   return (
-    <main className="mx-auto w-full max-w-2xl p-6">
-      <Suspense fallback={<p>Cargando…</p>}>
-        <EditarPropiedad params={params} />
-      </Suspense>
-    </main>
+    <Suspense fallback={<LoadingState />}>
+      <EditarPropiedad params={params} />
+    </Suspense>
   );
 }
 
@@ -27,12 +25,20 @@ async function EditarPropiedad({ params }: { params: Promise<{ id: string }> }) 
   });
 
   return (
-    <>
-      <Link href={`/propiedades/${propiedad.id}`} className="text-sm underline">
-        ← Detalle
-      </Link>
-      <h1 className="my-4 text-2xl font-semibold">Editar departamento {propiedad.numeroDepartamento}</h1>
-      <PropiedadForm propiedad={propiedad} />
-    </>
+    <div className="max-w-2xl">
+      <PageHeader
+        titulo={`Editar departamento ${propiedad.numeroDepartamento}`}
+        migas={[
+          { etiqueta: "Propiedades", href: "/propiedades" },
+          { etiqueta: `Depto ${propiedad.numeroDepartamento}`, href: `/propiedades/${propiedad.id}` },
+          { etiqueta: "Editar" },
+        ]}
+      />
+      <Card>
+        <CardBody>
+          <PropiedadForm propiedad={propiedad} />
+        </CardBody>
+      </Card>
+    </div>
   );
 }

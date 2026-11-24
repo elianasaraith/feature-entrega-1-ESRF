@@ -1,17 +1,18 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { hoyChile } from "@/server/clock";
+import { Plus } from "lucide-react";
+import { hoyActual } from "../../../_lib/hoy";
 import { NotFoundError } from "@/server/errors";
 import { contratoService, propiedadService } from "@/server/services";
+import { fecha } from "../../../_lib/format";
+import { Badge, ButtonLink, Card, DatosLista, EmptyState, LoadingState, PageHeader } from "../../../_ui";
+import type { TonoBadge } from "../../../_ui";
 
 export default function ContratosPage({ params }: { params: Promise<{ id: string }> }) {
   return (
-    <main className="mx-auto w-full max-w-3xl p-6">
-      <Suspense fallback={<p>Cargando…</p>}>
-        <Contratos params={params} />
-      </Suspense>
-    </main>
+    <Suspense fallback={<LoadingState />}>
+      <Contratos params={params} />
+    </Suspense>
   );
 }
 
@@ -20,6 +21,11 @@ const VIGENCIA: Record<string, string> = {
   VIGENTE: "Vigente",
   FINALIZADO: "Finalizado",
 };
+const TONO_VIGENCIA: Record<string, TonoBadge> = {
+  FUTURO: "info",
+  VIGENTE: "positive",
+  FINALIZADO: "neutral",
+};
 
 async function Contratos({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -27,81 +33,71 @@ async function Contratos({ params }: { params: Promise<{ id: string }> }) {
     if (error instanceof NotFoundError) notFound();
     throw error;
   });
-  const contratos = await contratoService.listar(id, hoyChile());
+  const contratos = await contratoService.listar(id, await hoyActual());
+  const base = `/propiedades/${propiedad.id}/contratos`;
 
   return (
     <>
-      <Link href={`/propiedades/${propiedad.id}`} className="text-sm underline">
-        ← Propiedad
-      </Link>
-      <div className="my-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">
-          Contratos · departamento {propiedad.numeroDepartamento}
-        </h1>
-        <Link
-          href={`/propiedades/${propiedad.id}/contratos/nuevo`}
-          className="rounded bg-black px-3 py-2 text-sm text-white"
-        >
-          Nuevo contrato
-        </Link>
-      </div>
+      <PageHeader
+        titulo="Contratos"
+        descripcion={`Departamento ${propiedad.numeroDepartamento}`}
+        migas={[
+          { etiqueta: "Propiedades", href: "/propiedades" },
+          { etiqueta: `Depto ${propiedad.numeroDepartamento}`, href: `/propiedades/${propiedad.id}` },
+          { etiqueta: "Contratos" },
+        ]}
+        acciones={
+          <ButtonLink href={`${base}/nuevo`}>
+            <Plus aria-hidden className="h-4 w-4" />
+            Nuevo contrato
+          </ButtonLink>
+        }
+      />
       {contratos.length === 0 ? (
-        <p className="text-sm">Esta propiedad aún no tiene contratos.</p>
+        <Card>
+          <EmptyState
+            titulo="Esta propiedad aún no tiene contratos"
+            descripcion="Registre el primer contrato de arriendo para comenzar a controlar los pagos."
+            accion={<ButtonLink href={`${base}/nuevo`}>Nuevo contrato</ButtonLink>}
+          />
+        </Card>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left">
-              <th className="py-1">Arrendatario</th>
-              <th>Vigencia</th>
-              <th>Día de pago</th>
-              <th>Monto inicial (CLP)</th>
-              <th>Garantía (contractual)</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {contratos.map((c) => (
-              <tr key={c.id} className="border-t align-top">
-                <td className="py-1">{c.arrendatario.nombre}</td>
-                <td>
-                  {VIGENCIA[c.vigencia]}
-                  <span className="block text-xs">
-                    {c.fechaInicio} a {c.fechaTermino}
-                  </span>
-                </td>
-                <td>{c.diaEsperadoPago}</td>
-                <td>{c.montoInicialClp ?? "Sin monto registrado"}</td>
-                <td>{c.garantiaClp ?? "—"}</td>
-                <td>
-                  <Link
-                    href={`/propiedades/${propiedad.id}/contratos/${c.id}/editar`}
-                    className="underline"
-                  >
-                    Editar
-                  </Link>
-                  <Link
-                    href={`/propiedades/${propiedad.id}/contratos/${c.id}/montos`}
-                    className="ml-3 underline"
-                  >
-                    Montos
-                  </Link>
-                  <Link
-                    href={`/propiedades/${propiedad.id}/contratos/${c.id}/pagos`}
-                    className="ml-3 underline"
-                  >
+        <ul className="space-y-4">
+          {contratos.map((c) => (
+            <li key={c.id}>
+              <Card className="p-5">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-base font-semibold text-ink">{c.arrendatario.nombre}</h2>
+                  <Badge tono={TONO_VIGENCIA[c.vigencia] ?? "neutral"}>{VIGENCIA[c.vigencia] ?? c.vigencia}</Badge>
+                </div>
+                <DatosLista
+                  filas={[
+                    ["Vigencia", `${fecha(c.fechaInicio)} a ${fecha(c.fechaTermino)}`],
+                    ["Día de pago", c.diaEsperadoPago],
+                    ["Monto inicial (CLP)", c.montoInicialClp ?? "Sin monto registrado"],
+                    ["Garantía (contractual)", c.garantiaClp ?? "—"],
+                    ["RUT", c.arrendatario.rut ?? "—"],
+                    ["Contacto", [c.arrendatario.email, c.arrendatario.telefono].filter(Boolean).join(" · ") || "—"],
+                  ]}
+                />
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
+                  <ButtonLink variante="secondary" tamano="sm" href={`${base}/${c.id}/pagos`}>
                     Pagos
-                  </Link>
-                  <Link
-                    href={`/propiedades/${propiedad.id}/contratos/${c.id}/arrendatario/editar`}
-                    className="ml-3 underline"
-                  >
+                  </ButtonLink>
+                  <ButtonLink variante="secondary" tamano="sm" href={`${base}/${c.id}/montos`}>
+                    Montos
+                  </ButtonLink>
+                  <ButtonLink variante="ghost" tamano="sm" href={`${base}/${c.id}/editar`}>
+                    Editar
+                  </ButtonLink>
+                  <ButtonLink variante="ghost" tamano="sm" href={`${base}/${c.id}/arrendatario/editar`}>
                     Editar arrendatario
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </ButtonLink>
+                </div>
+              </Card>
+            </li>
+          ))}
+        </ul>
       )}
     </>
   );

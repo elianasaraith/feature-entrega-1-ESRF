@@ -1,40 +1,44 @@
 import Link from "next/link";
-import { formatearClp } from "@/server/domain/dashboard";
+import { clp, fecha } from "../_lib/format";
+import { Badge, DataTable, EmptyState, Td, Th, type TonoBadge } from "../_ui";
 import type { ActividadDto } from "@/server/services/dashboard-service";
 
-const ORIGEN: Record<ActividadDto["origen"], string> = {
-  ABONO: "Arriendo",
-  DIVIDENDO: "Dividendo",
-  MOVIMIENTO: "Movimiento",
+const ORIGEN: Record<ActividadDto["origen"], [string, TonoBadge]> = {
+  ABONO: ["Arriendo", "positive"],
+  DIVIDENDO: ["Dividendo", "info"],
+  MOVIMIENTO: ["Movimiento", "warning"],
 };
 
 // La lista ya llega ordenada (más reciente primero) desde dashboard-service.
 export function ActividadReciente({ actividad }: { actividad: ActividadDto[] }) {
-  if (actividad.length === 0) return <p className="text-sm">Sin actividad en el mes.</p>;
+  if (actividad.length === 0) return <EmptyState titulo="Sin actividad en el mes" />;
   return (
-    <table className="w-full text-left text-sm">
+    <DataTable>
       <thead>
-        <tr className="border-b">
-          <th className="py-2">Fecha</th>
-          <th>Concepto</th>
-          <th>Origen</th>
-          <th className="text-right">Importe</th>
+        <tr>
+          <Th>Fecha</Th>
+          <Th>Concepto</Th>
+          <Th>Origen</Th>
+          <Th alinear="right">Importe</Th>
         </tr>
       </thead>
       <tbody>
-        {actividad.map((a) => (
-          <tr key={`${a.origen}-${a.id}`} className="border-b">
-            <td className="py-2">{a.fecha}</td>
-            <td>{a.concepto}</td>
-            <td>
-              <Link href={a.href} className="underline">
-                {ORIGEN[a.origen]}
-              </Link>
-            </td>
-            <td className="text-right tabular-nums">$ {formatearClp(a.montoClp)}</td>
-          </tr>
-        ))}
+        {actividad.map((a) => {
+          const [etiqueta, tono] = ORIGEN[a.origen];
+          return (
+            <tr key={`${a.origen}-${a.id}`}>
+              <Td className="whitespace-nowrap">{fecha(a.fecha)}</Td>
+              <Td>{a.concepto}</Td>
+              <Td>
+                <Link href={a.href} className="hover:underline">
+                  <Badge tono={tono}>{etiqueta}</Badge>
+                </Link>
+              </Td>
+              <Td numerico className="whitespace-nowrap">{clp(a.montoClp)}</Td>
+            </tr>
+          );
+        })}
       </tbody>
-    </table>
+    </DataTable>
   );
 }

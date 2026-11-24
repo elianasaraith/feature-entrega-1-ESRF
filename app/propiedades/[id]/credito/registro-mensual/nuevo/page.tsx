@@ -1,17 +1,15 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { NotFoundError } from "@/server/errors";
 import { creditoService, propiedadService } from "@/server/services";
 import { RegistroForm } from "../registro-form";
+import { Card, CardBody, LoadingState, PageHeader } from "../../../../../_ui";
 
 export default function NuevoRegistroPage({ params }: { params: Promise<{ id: string }> }) {
   return (
-    <main className="mx-auto w-full max-w-2xl p-6">
-      <Suspense fallback={<p>Cargando…</p>}>
-        <NuevoRegistro params={params} />
-      </Suspense>
-    </main>
+    <Suspense fallback={<LoadingState />}>
+      <NuevoRegistro params={params} />
+    </Suspense>
   );
 }
 
@@ -28,17 +26,22 @@ async function NuevoRegistro({ params }: { params: Promise<{ id: string }> }) {
   });
 
   return (
-    <>
-      <Link
-        href={`/propiedades/${propiedad.id}/credito/registro-mensual`}
-        className="text-sm underline"
-      >
-        ← Registro mensual
-      </Link>
-      <h1 className="my-4 text-2xl font-semibold">
-        Registrar mes · departamento {propiedad.numeroDepartamento}
-      </h1>
-      <RegistroForm propiedadId={propiedad.id} />
-    </>
+    <div className="max-w-2xl">
+      <PageHeader
+        titulo={`Registrar mes · departamento ${propiedad.numeroDepartamento}`}
+        migas={[
+          { etiqueta: "Propiedades", href: "/propiedades" },
+          { etiqueta: `Depto ${propiedad.numeroDepartamento}`, href: `/propiedades/${propiedad.id}` },
+          { etiqueta: "Crédito hipotecario", href: `/propiedades/${propiedad.id}/credito` },
+          { etiqueta: "Registro mensual", href: `/propiedades/${propiedad.id}/credito/registro-mensual` },
+          { etiqueta: "Registrar mes" },
+        ]}
+      />
+      <Card>
+        <CardBody>
+          <RegistroForm propiedadId={propiedad.id} />
+        </CardBody>
+      </Card>
+    </div>
   );
 }

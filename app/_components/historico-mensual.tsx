@@ -1,32 +1,37 @@
-import { formatearClp } from "@/server/domain/dashboard";
+import { clp, mesLargo } from "../_lib/format";
+import { cn } from "../_lib/cn";
+import { DataTable, Td, Th } from "../_ui";
 import type { PeriodoHistoricoDto } from "@/server/services/dashboard-service";
 
 // Solo presenta totales ya calculados por dashboard-service.
 export function HistoricoMensual({ periodos }: { periodos: PeriodoHistoricoDto[] }) {
   return (
-    <table className="w-full text-left text-sm">
+    <DataTable>
+      <caption className="sr-only">Histórico mensual de ingresos, egresos y flujo neto</caption>
       <thead>
-        <tr className="border-b">
-          <th className="py-2">Mes</th>
-          <th className="text-right">Ingresos</th>
-          <th className="text-right">Dividendos</th>
-          <th className="text-right">Otros egresos</th>
-          <th className="text-right">Egresos totales</th>
-          <th className="text-right">Flujo neto</th>
+        <tr>
+          <Th>Mes</Th>
+          <Th alinear="right">Ingresos</Th>
+          <Th alinear="right">Dividendos</Th>
+          <Th alinear="right">Otros egresos</Th>
+          <Th alinear="right">Egresos totales</Th>
+          <Th alinear="right">Flujo neto</Th>
         </tr>
       </thead>
       <tbody>
         {periodos.map((p) => (
-          <tr key={p.mes} className="border-b">
-            <td className="py-2">{p.mes}</td>
-            <td className="text-right tabular-nums">$ {formatearClp(p.ingresosClp)}</td>
-            <td className="text-right tabular-nums">$ {formatearClp(p.dividendosClp)}</td>
-            <td className="text-right tabular-nums">$ {formatearClp(p.otrosEgresosClp)}</td>
-            <td className="text-right tabular-nums">$ {formatearClp(p.egresosTotalesClp)}</td>
-            <td className="text-right tabular-nums">$ {formatearClp(p.flujoNetoClp)}</td>
+          <tr key={p.mes}>
+            <Td className="whitespace-nowrap capitalize">{mesLargo(p.mes)}</Td>
+            <Td numerico>{clp(p.ingresosClp)}</Td>
+            <Td numerico>{clp(p.dividendosClp)}</Td>
+            <Td numerico>{clp(p.otrosEgresosClp)}</Td>
+            <Td numerico>{clp(p.egresosTotalesClp)}</Td>
+            <Td numerico className={cn("font-medium", p.flujoNetoClp.startsWith("-") && "text-negative")}>
+              {clp(p.flujoNetoClp)}
+            </Td>
           </tr>
         ))}
       </tbody>
-    </table>
+    </DataTable>
   );
 }

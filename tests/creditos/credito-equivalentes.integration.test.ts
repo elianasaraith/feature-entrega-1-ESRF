@@ -73,7 +73,7 @@ after(async () => {
   await prisma.$disconnect();
 });
 
-type Opciones = { fechaOtorgamiento?: string; saldoInicialUf?: string; saldoMensual?: string };
+type Opciones = { fechaOtorgamiento?: string; saldoInicialUf?: string; saldoMensual?: string; porcentajePie?: string };
 
 async function crearCredito(uf: UfService | undefined, o: Opciones = {}) {
   const propiedad = await propiedades.crear(
@@ -97,6 +97,7 @@ async function crearCredito(uf: UfService | undefined, o: Opciones = {}) {
       diaVencimiento: 5,
       fechaOtorgamiento: o.fechaOtorgamiento,
       saldoInicialUf: o.saldoInicialUf,
+      porcentajePie: o.porcentajePie,
     })
   );
   if (o.saldoMensual) {
@@ -212,10 +213,31 @@ test("compatibilidad: sin servicio de UF los campos previos no cambian y los equ
   const { id, servicio } = await crearCredito(undefined, todo);
   const base = await servicio.obtenerPorPropiedad(id);
   const r = await servicio.obtenerConEquivalentes(id, HOY);
-  const { cuotaContractualClp, saldoInicialClp, ultimoSaldo, ...previos } = r;
+  // `pieEstimado` es un campo añadido (como los equivalentes); `porcentajePie` ya
+  // forma parte del DTO base y debe coincidir.
+  const { cuotaContractualClp, saldoInicialClp, ultimoSaldo, pieEstimado, ...previos } = r;
   assert.deepEqual(previos, base);
+  assert.equal(base.porcentajePie, null); // crédito sin pie: null, no "0"
+  assert.equal(pieEstimado, null);
   assert.equal(cuotaContractualClp, null);
   assert.equal(saldoInicialClp, null);
   assert.equal(ultimoSaldo?.equivalenteClp, null);
   assert.equal(ultimoSaldo?.periodo, "1991-04");
+});
+
+test("el pie no depende del servicio de UF: mismo porcentaje y monto con y sin UF", { skip }, async () => {
+  const sin = await crearCredito(undefined, { ...todo, porcentajePie: "20" });
+  const con = await crearCredito(createUfService(prisma, { fuente: "doble-pruebas", obtener: async () => ({ tipo: "sin-datos" }) }, silencio), {
+    ...todo,
+    porcentajePie: "20",
+  });
+  for (const { id, servicio } of [sin, con]) {
+    const base = await servicio.obtenerPorPropiedad(id);
+    const r = await servicio.obtenerConEquivalentes(id, HOY);
+    assert.equal(base.porcentajePie, "20");
+    assert.equal(r.porcentajePie, "20");
+    assert.equal(r.cuotaContractualUf, "10");
+    assert.deepEqual(r.pieEstimado, { montoEstimado: "400.0000", moneda: "UF", restoPorcentaje: "80" });
+  }
+  assert.equal((await sin.servicio.obtenerConEquivalentes(sin.id, HOY)).cuotaContractualClp, null);
 });

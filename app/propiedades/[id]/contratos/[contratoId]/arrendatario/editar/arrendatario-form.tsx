@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ArrendatarioDto } from "@/server/services/arrendatario-service";
-
-const inputClass = "w-full rounded border px-2 py-1";
+import { Alert, Button, ButtonLink, FormField, Input } from "../../../../../../_ui";
 
 // Edición (PUT, cuerpo completo) de los datos del arrendatario de un contrato.
 export function ArrendatarioForm({ propiedadId, arrendatario }: { propiedadId: string; arrendatario: ArrendatarioDto }) {
@@ -15,6 +14,7 @@ export function ArrendatarioForm({ propiedadId, arrendatario }: { propiedadId: s
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (enviando) return;
     setEnviando(true);
     setErrores({});
     setErrorGeneral(null);
@@ -40,43 +40,29 @@ export function ArrendatarioForm({ propiedadId, arrendatario }: { propiedadId: s
     }
   }
 
-  const mensajes = (nombre: string) =>
-    errores[nombre]?.map((m) => (
-      <span key={m} className="block text-red-600">
-        {m}
-      </span>
-    ));
-
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Nombre</span>
-        <input name="nombre" type="text" required defaultValue={arrendatario.nombre} className={inputClass} />
-        {mensajes("nombre")}
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">RUT (opcional)</span>
-        <input name="rut" type="text" defaultValue={arrendatario.rut ?? ""} className={inputClass} />
-        {mensajes("rut")}
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Email (opcional)</span>
-        <input name="email" type="text" defaultValue={arrendatario.email ?? ""} className={inputClass} />
-        {mensajes("email")}
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Teléfono (opcional)</span>
-        <input name="telefono" type="text" defaultValue={arrendatario.telefono ?? ""} className={inputClass} />
-        {mensajes("telefono")}
-      </label>
-      {errorGeneral && (
-        <p role="alert" className="text-sm text-red-600">
-          {errorGeneral}
-        </p>
-      )}
-      <button type="submit" disabled={enviando} className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50">
-        {enviando ? "Guardando…" : "Guardar"}
-      </button>
+      <FormField etiqueta="Nombre" requerido errores={errores.nombre}>
+        <Input name="nombre" type="text" required defaultValue={arrendatario.nombre} />
+      </FormField>
+      <FormField etiqueta="RUT (opcional)" errores={errores.rut}>
+        <Input name="rut" type="text" defaultValue={arrendatario.rut ?? ""} />
+      </FormField>
+      <FormField etiqueta="Email (opcional)" errores={errores.email}>
+        <Input name="email" type="text" defaultValue={arrendatario.email ?? ""} />
+      </FormField>
+      <FormField etiqueta="Teléfono (opcional)" errores={errores.telefono}>
+        <Input name="telefono" type="text" defaultValue={arrendatario.telefono ?? ""} />
+      </FormField>
+      {errorGeneral && <Alert tono="error">{errorGeneral}</Alert>}
+      <div className="flex gap-2">
+        <Button type="submit" cargando={enviando}>
+          {enviando ? "Guardando…" : "Guardar"}
+        </Button>
+        <ButtonLink variante="secondary" href={`/propiedades/${propiedadId}/contratos`}>
+          Cancelar
+        </ButtonLink>
+      </div>
     </form>
   );
 }

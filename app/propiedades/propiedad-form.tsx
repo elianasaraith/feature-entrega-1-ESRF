@@ -3,10 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PropiedadDto } from "@/server/services/propiedad-service";
+import { Alert, Button, ButtonLink, FormField, Input, Select } from "../_ui";
 
 type Props = { propiedad?: PropiedadDto };
-
-const inputClass = "w-full rounded border px-2 py-1";
 
 export function PropiedadForm({ propiedad }: Props) {
   const router = useRouter();
@@ -16,6 +15,7 @@ export function PropiedadForm({ propiedad }: Props) {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (enviando) return;
     setEnviando(true);
     setErrores({});
     setErrorGeneral(null);
@@ -53,21 +53,15 @@ export function PropiedadForm({ propiedad }: Props) {
     opciones: { type?: string; requerido?: boolean; valor?: string | null } = {}
   ) {
     return (
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">{etiqueta}</span>
-        <input
+      <FormField etiqueta={etiqueta} errores={errores[nombre]} requerido={opciones.requerido}>
+        <Input
           name={nombre}
           type={opciones.type ?? "text"}
           required={opciones.requerido}
           defaultValue={opciones.valor ?? ""}
-          className={inputClass}
+          aria-invalid={errores[nombre] ? true : undefined}
         />
-        {errores[nombre]?.map((mensaje) => (
-          <span key={mensaje} className="block text-red-600">
-            {mensaje}
-          </span>
-        ))}
-      </label>
+      </FormField>
     );
   }
 
@@ -79,41 +73,40 @@ export function PropiedadForm({ propiedad }: Props) {
       })}
       {campo("direccion", "Dirección (opcional)", { valor: propiedad?.direccion })}
       {campo("superficieM2", "Superficie (m²)", { requerido: true, valor: propiedad?.superficieM2 })}
-      {campo("valorCompraMonto", "Valor de compra", {
-        requerido: true,
-        valor: propiedad?.valorCompraMonto,
-      })}
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Moneda</span>
-        <select
-          name="valorCompraMoneda"
-          defaultValue={propiedad?.valorCompraMoneda ?? "UF"}
-          className={inputClass}
-        >
-          <option value="UF">UF</option>
-          <option value="CLP">CLP</option>
-        </select>
-        {errores.valorCompraMoneda?.map((mensaje) => (
-          <span key={mensaje} className="block text-red-600">
-            {mensaje}
-          </span>
-        ))}
-      </label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {campo("valorCompraMonto", "Valor de compra", {
+          requerido: true,
+          valor: propiedad?.valorCompraMonto,
+        })}
+        <FormField etiqueta="Moneda" errores={errores.valorCompraMoneda}>
+          <Select
+            name="valorCompraMoneda"
+            defaultValue={propiedad?.valorCompraMoneda ?? "UF"}
+            aria-invalid={errores.valorCompraMoneda ? true : undefined}
+          >
+            <option value="UF">UF</option>
+            <option value="CLP">CLP</option>
+          </Select>
+        </FormField>
+      </div>
       {campo("fechaCompra", "Fecha de compra", {
         type: "date",
         requerido: true,
         valor: propiedad?.fechaCompra,
       })}
-      {campo("estacionamiento", "Estacionamiento (opcional)", { valor: propiedad?.estacionamiento })}
-      {campo("bodega", "Bodega (opcional)", { valor: propiedad?.bodega })}
-      {errorGeneral && <p className="text-red-600">{errorGeneral}</p>}
-      <button
-        type="submit"
-        disabled={enviando}
-        className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-      >
-        {enviando ? "Guardando…" : "Guardar"}
-      </button>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {campo("estacionamiento", "Estacionamiento (opcional)", { valor: propiedad?.estacionamiento })}
+        {campo("bodega", "Bodega (opcional)", { valor: propiedad?.bodega })}
+      </div>
+      {errorGeneral && <Alert tono="error">{errorGeneral}</Alert>}
+      <div className="flex gap-2">
+        <Button type="submit" cargando={enviando}>
+          {enviando ? "Guardando…" : "Guardar"}
+        </Button>
+        <ButtonLink href={propiedad ? `/propiedades/${propiedad.id}` : "/propiedades"} variante="secondary">
+          Cancelar
+        </ButtonLink>
+      </div>
     </form>
   );
 }

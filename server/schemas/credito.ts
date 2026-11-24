@@ -29,6 +29,15 @@ function integerInRange(min: number, max: number, message: string) {
 const montoUfPositivo = positiveDecimal(8, 4);
 const montoUfNoNegativo = nonNegativeDecimal(8, 4);
 
+// Porcentaje de pie: NUMERIC(5,2), 0..100 inclusive. El tope se compara sobre el
+// texto (sin Number): 100 o 100.00 pasan; 100.01 no.
+// Los enteros largos caen en el mismo mensaje de rango (un solo error por campo).
+const porcentajePie = nonNegativeDecimal(15, 2).refine((v) => {
+  const [entera, decimales = ""] = v.split(".");
+  const n = entera.replace(/^0+(?=\d)/, "");
+  return n.length < 3 || (n === "100" && !/[1-9]/.test(decimales));
+}, "Debe estar entre 0 y 100");
+
 const optionalDecimal = (schema: z.ZodType<string>) =>
   z
     .union([z.null(), z.literal("").transform(() => null), schema])
@@ -55,6 +64,7 @@ export const creditoInputSchema = z.object({
   segurosUf: optionalDecimal(montoUfNoNegativo),
   diaVencimiento: integerInRange(1, 31, "Debe estar entre 1 y 31"),
   saldoInicialUf: optionalDecimal(montoUfNoNegativo),
+  porcentajePie: optionalDecimal(porcentajePie),
 });
 
 export type CreditoInput = z.output<typeof creditoInputSchema>;

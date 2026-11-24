@@ -1,17 +1,15 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { NotFoundError } from "@/server/errors";
 import { creditoService, propiedadService } from "@/server/services";
 import { CreditoForm } from "../credito-form";
+import { Card, CardBody, LoadingState, PageHeader } from "../../../../_ui";
 
 export default function NuevoCreditoPage({ params }: { params: Promise<{ id: string }> }) {
   return (
-    <main className="mx-auto w-full max-w-2xl p-6">
-      <Suspense fallback={<p>Cargando…</p>}>
-        <NuevoCredito params={params} />
-      </Suspense>
-    </main>
+    <Suspense fallback={<LoadingState />}>
+      <NuevoCredito params={params} />
+    </Suspense>
   );
 }
 
@@ -33,14 +31,21 @@ async function NuevoCredito({ params }: { params: Promise<{ id: string }> }) {
   if (existe) redirect(`/propiedades/${id}/credito/editar`);
 
   return (
-    <>
-      <Link href={`/propiedades/${propiedad.id}/credito`} className="text-sm underline">
-        ← Crédito hipotecario
-      </Link>
-      <h1 className="my-4 text-2xl font-semibold">
-        Registrar crédito · departamento {propiedad.numeroDepartamento}
-      </h1>
-      <CreditoForm propiedadId={propiedad.id} />
-    </>
+    <div className="max-w-2xl">
+      <PageHeader
+        titulo={`Registrar crédito · departamento ${propiedad.numeroDepartamento}`}
+        migas={[
+          { etiqueta: "Propiedades", href: "/propiedades" },
+          { etiqueta: `Depto ${propiedad.numeroDepartamento}`, href: `/propiedades/${propiedad.id}` },
+          { etiqueta: "Crédito hipotecario", href: `/propiedades/${propiedad.id}/credito` },
+          { etiqueta: "Registrar" },
+        ]}
+      />
+      <Card>
+        <CardBody>
+          <CreditoForm propiedadId={propiedad.id} />
+        </CardBody>
+      </Card>
+    </div>
   );
 }

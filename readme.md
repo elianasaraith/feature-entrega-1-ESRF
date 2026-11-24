@@ -24,7 +24,7 @@
 > también está implementada: valores históricos de findic.cl conservados por período y
 > equivalentes en CLP en el crédito, su registro mensual y el dashboard (ver «Estado funcional» y
 > `docs/work-tickets.md` §4.10). **El MVP no está terminado**:
-> siguen pendientes, entre otros, el rediseño del frontend, las pruebas E2E, las verificaciones
+> el rediseño del frontend (`rediseno-frontend`) y el porcentaje de pie hipotecario (`porcentaje-pie-hipotecario`) están implementados, validados localmente y archivados; siguen pendientes, entre otros, las pruebas E2E, las verificaciones
 > de seguridad y el despliegue (T11, documentos, está implementado y validado contra Cloudflare R2). El ticket de aportes de capital (T08) se canceló por decisión de producto. Lo que describen las secciones para esas capacidades es diseño propuesto; cada
 > sección distingue lo implementado de lo propuesto. El detalle técnico completo vive en
 > `docs/`; este documento lo resume e integra, sin duplicarlo.
@@ -115,6 +115,8 @@ Detalle completo: [docs/product.md](docs/product.md) §1–§3.
 Detalle completo: [docs/product.md](docs/product.md) §5–§6.
 
 ### **1.3. Diseño y experiencia de usuario:**
+
+**Rediseño (implementado, validado localmente y archivado):** sistema de diseño propio con tokens en `app/globals.css` (sidebar azul marino `#14283F`, acción `#2563EB`, positivo `#059669`, advertencia `#D97706`, negativo `#DC2626`), componentes compartidos en `app/_ui/` (AppShell con sidebar responsive y menú móvil, PageHeader/Breadcrumbs, Button, Card/StatCard, Badge de estado de pago, FormField/Input/Select, DataTable, EmptyState/LoadingState/ErrorState, Alert, ConfirmDialog), formatos CLP/UF/fecha en `app/_lib/format.ts`, iconos con `lucide-react` y gráficos con `recharts` (ingresos/egresos y flujo neto del histórico de 6/12 meses). Navegación contextual por propiedad (Resumen · Crédito · Contratos · Movimientos · Documentos), páginas `error` y `not-found` propias y documentos con arrastrar y soltar. Solo presentación: sin cambios en API, reglas ni cálculos financieros.
 
 **Estado:** la interfaz está implementada para acceso (`/login`), propiedades,
 crédito hipotecario con su registro mensual, contratos y montos de arriendo
@@ -314,8 +316,7 @@ CORS que permita `PUT` desde el origen de la aplicación con la cabecera `Conten
 estas variables la aplicación funciona y las operaciones de documentos responden 503. La
 migración `20261123120000_add_documento` debe aplicarse antes (`npx prisma migrate deploy`).
 
-**Pendiente antes de la entrega final (jueves 26 de noviembre de 2026):** rediseño integral del
-frontend, pruebas E2E, verificaciones de seguridad y despliegue (Vercel y Neon, propuesto).
+**Pendiente antes de la entrega final (jueves 26 de noviembre de 2026):** pruebas E2E, revisión de seguridad, despliegue público (Vercel y Neon, propuesto) y preparación de la entrega final.
 
 ---
 
@@ -392,7 +393,7 @@ contrato y configuración para servir a un único consumidor.
 
 | Componente | Tecnología | Responsabilidad |
 |---|---|---|
-| UI (`app/`) | React (Server + Client Components), Tailwind CSS | Presentar y capturar; ningún cálculo financiero |
+| UI (`app/`, `app/_ui/`) | React (Server + Client Components), Tailwind CSS 4, lucide-react, recharts | Presentar y capturar; ningún cálculo financiero |
 | API (`app/api/`) | Route Handlers de Next.js, REST | Validar entrada, autenticar, invocar el servicio, traducir errores a HTTP |
 | Servicios (`server/services/`) | TypeScript | Orquestar: leer, aplicar reglas, escribir; agregaciones mensuales y regla de caja |
 | Dominio (`server/domain/`) | TypeScript, funciones puras | Reglas con precedencia: estado del pago, fecha de completitud, monto vigente, conversión UF→CLP |
@@ -408,6 +409,7 @@ Detalle: [docs/architecture.md](docs/architecture.md) §3, §5.
 ```
 app/
   (auth)/login/     pantalla de acceso                                  [implementado]
+  _ui/ _lib/        sistema de diseño, AppShell, formatos               [implementado]
   propiedades/      cartera, detalle, crédito y registro mensual,
                     contratos y montos (propiedades/[id]/…)             [implementado]
   api/              Route Handlers — API REST                           [implementado]
@@ -564,6 +566,7 @@ erDiagram
         numeric seguros_uf "NULL - 12,4"
         smallint dia_vencimiento "NOT NULL - 1 a 31"
         numeric saldo_inicial_uf "NULL - 12,4"
+        numeric porcentaje_pie "NULL - 5,2 - 0 a 100"
         timestamptz created_at "NOT NULL"
         timestamptz updated_at "NOT NULL"
     }

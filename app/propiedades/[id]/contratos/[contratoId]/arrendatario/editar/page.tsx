@@ -1,20 +1,18 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { hoyChile } from "@/server/clock";
+import { hoyActual } from "../../../../../../_lib/hoy";
 import { NotFoundError } from "@/server/errors";
 import { contratoService, propiedadService } from "@/server/services";
+import { Card, CardBody, LoadingState, PageHeader } from "../../../../../../_ui";
 import { ArrendatarioForm } from "./arrendatario-form";
 
 type Params = Promise<{ id: string; contratoId: string }>;
 
 export default function EditarArrendatarioPage({ params }: { params: Params }) {
   return (
-    <main className="mx-auto w-full max-w-2xl p-6">
-      <Suspense fallback={<p>Cargando…</p>}>
-        <EditarArrendatario params={params} />
-      </Suspense>
-    </main>
+    <Suspense fallback={<LoadingState />}>
+      <EditarArrendatario params={params} />
+    </Suspense>
   );
 }
 
@@ -25,16 +23,24 @@ async function EditarArrendatario({ params }: { params: Params }) {
     throw error;
   };
   const propiedad = await propiedadService.obtener(id).catch(alNoEncontrar);
-  const contrato = await contratoService.obtener(id, contratoId, hoyChile()).catch(alNoEncontrar);
+  const contrato = await contratoService.obtener(id, contratoId, await hoyActual()).catch(alNoEncontrar);
   return (
     <>
-      <Link href={`/propiedades/${propiedad.id}/contratos`} className="text-sm underline">
-        ← Contratos
-      </Link>
-      <h1 className="my-4 text-2xl font-semibold">
-        Editar arrendatario · departamento {propiedad.numeroDepartamento}
-      </h1>
-      <ArrendatarioForm propiedadId={propiedad.id} arrendatario={contrato.arrendatario} />
+      <PageHeader
+        titulo="Editar arrendatario"
+        descripcion={`Departamento ${propiedad.numeroDepartamento}`}
+        migas={[
+          { etiqueta: "Propiedades", href: "/propiedades" },
+          { etiqueta: `Depto ${propiedad.numeroDepartamento}`, href: `/propiedades/${propiedad.id}` },
+          { etiqueta: "Contratos", href: `/propiedades/${propiedad.id}/contratos` },
+          { etiqueta: "Editar arrendatario" },
+        ]}
+      />
+      <Card className="max-w-2xl">
+        <CardBody>
+          <ArrendatarioForm propiedadId={propiedad.id} arrendatario={contrato.arrendatario} />
+        </CardBody>
+      </Card>
     </>
   );
 }

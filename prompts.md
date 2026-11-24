@@ -606,6 +606,25 @@ añadió un token de subida emitido por el servidor y la validación del objeto 
 ejecutar pruebas de integración, build ni R2 en su entorno; la persona los ejecutó localmente y
 validó manualmente la interfaz y R2.
 
+**Rediseño integral del frontend (change `rediseno-frontend`).** Un único change de OpenSpec
+(propose + apply + verify autónomos por autorización de la persona; archivado tras la validación
+visual y funcional local de la persona). La IA construyó primero el sistema de diseño y el layout compartido y lanzó
+3 subagentes por módulos con archivos exclusivos. Realmente: el subagente de propiedades y créditos
+terminó; los de contratos/pagos y de movimientos/documentos quedaron bloqueados por permisos de
+escritura del entorno y se detuvieron, por lo que la IA completó esos módulos de forma secuencial. La
+skill `frontend-design` no existe en el entorno y no se usó. Dependencias nuevas autorizadas:
+`lucide-react` y `recharts`. La IA no pudo ejecutar el build ni la revisión visual en su sandbox.
+
+**Porcentaje de pie hipotecario (change `porcentaje-pie-hipotecario`).** Change independiente de
+OpenSpec (propose + apply + verify autónomos por autorización de la persona; sin commit, push,
+archive ni migraciones ejecutadas por la IA; archivado tras la validación local de la persona). Campo opcional `porcentaje_pie` `DECIMAL(5,2)` con `CHECK` 0–100,
+migración no destructiva, validación sin `Number`, monto estimado del pie como función pura y barra
+pie/resto en el detalle del crédito, reutilizando el sistema de diseño de `rediseno-frontend` sin
+modificarlo. Decisión de producto de la persona: el pie es dato informado, no se deduce del monto
+original ni se contabiliza como egreso. La IA no pudo ejecutar migraciones ni pruebas de integración
+con PostgreSQL en su entorno; la persona las ejecutó localmente. Quedan pendientes pruebas E2E,
+revisión de seguridad, despliegue público y preparación de la entrega final.
+
 ---
 
 ### 7. Pull Requests

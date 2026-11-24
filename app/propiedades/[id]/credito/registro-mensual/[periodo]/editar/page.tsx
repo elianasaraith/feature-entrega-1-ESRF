@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { NotFoundError } from "@/server/errors";
 import { periodoSchema } from "@/server/schemas/credito-registro";
 import { creditoRegistroService, propiedadService } from "@/server/services";
 import { RegistroForm } from "../../registro-form";
+import { Card, CardBody, LoadingState, PageHeader } from "../../../../../../_ui";
 
 export default function EditarRegistroPage({
   params,
@@ -12,11 +12,9 @@ export default function EditarRegistroPage({
   params: Promise<{ id: string; periodo: string }>;
 }) {
   return (
-    <main className="mx-auto w-full max-w-2xl p-6">
-      <Suspense fallback={<p>Cargando…</p>}>
-        <EditarRegistro params={params} />
-      </Suspense>
-    </main>
+    <Suspense fallback={<LoadingState />}>
+      <EditarRegistro params={params} />
+    </Suspense>
   );
 }
 
@@ -39,17 +37,22 @@ async function EditarRegistro({ params }: { params: Promise<{ id: string; period
   if (!registro.registrado) redirect(`/propiedades/${id}/credito/registro-mensual/nuevo`);
 
   return (
-    <>
-      <Link
-        href={`/propiedades/${propiedad.id}/credito/registro-mensual`}
-        className="text-sm underline"
-      >
-        ← Registro mensual
-      </Link>
-      <h1 className="my-4 text-2xl font-semibold">
-        Editar {registro.periodo} · departamento {propiedad.numeroDepartamento}
-      </h1>
-      <RegistroForm propiedadId={propiedad.id} registro={registro} />
-    </>
+    <div className="max-w-2xl">
+      <PageHeader
+        titulo={`Editar ${registro.periodo} · departamento ${propiedad.numeroDepartamento}`}
+        migas={[
+          { etiqueta: "Propiedades", href: "/propiedades" },
+          { etiqueta: `Depto ${propiedad.numeroDepartamento}`, href: `/propiedades/${propiedad.id}` },
+          { etiqueta: "Crédito hipotecario", href: `/propiedades/${propiedad.id}/credito` },
+          { etiqueta: "Registro mensual", href: `/propiedades/${propiedad.id}/credito/registro-mensual` },
+          { etiqueta: `Editar ${registro.periodo}` },
+        ]}
+      />
+      <Card>
+        <CardBody>
+          <RegistroForm propiedadId={propiedad.id} registro={registro} />
+        </CardBody>
+      </Card>
+    </div>
   );
 }

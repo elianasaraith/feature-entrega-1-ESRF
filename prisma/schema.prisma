@@ -43,7 +43,7 @@ model Propiedad {
 // Condiciones contractuales del crédito (T02). docs/data-model.md §4.3.
 // Sin columna de saldo vigente ni equivalentes en CLP (data-model §4.3,
 // architecture §10.3). Los CHECK (cuota > 0, tasa >= 0, cuotas > 0, día 1..31,
-// monto original > 0, seguros >= 0, saldo inicial >= 0) viven en la migración SQL.
+// monto original > 0, seguros >= 0, saldo inicial >= 0, porcentaje de pie 0..100) viven en la migración SQL.
 model CreditoHipotecario {
   id                 String    @id @default(uuid()) @db.Uuid
   propiedadId        String    @unique @map("propiedad_id") @db.Uuid
@@ -57,6 +57,7 @@ model CreditoHipotecario {
   segurosUf          Decimal?  @map("seguros_uf") @db.Decimal(12, 4)
   diaVencimiento     Int       @map("dia_vencimiento") @db.SmallInt
   saldoInicialUf     Decimal?  @map("saldo_inicial_uf") @db.Decimal(12, 4)
+  porcentajePie      Decimal?  @map("porcentaje_pie") @db.Decimal(5, 2)
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 

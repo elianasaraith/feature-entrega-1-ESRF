@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/* Tokens de RealtyTrack: tema claro, sidebar azul marino. */
+@theme inline {
+  --color-navy: #14283f;
+  --color-navy-700: #1d3652;
+  --color-navy-600: #2a4668;
+  --color-brand: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-50: #eff4ff;
+  --color-positive: #059669;
+  --color-positive-50: #ecfdf5;
+  --color-warning: #b45309;
+  --color-warning-50: #fffbeb;
+  --color-negative: #dc2626;
+  --color-negative-50: #fef2f2;
+  --color-canvas: #f5f7fa;
+  --color-line: #e2e8f0;
+  --color-ink: #0f1c2e;
+  --color-muted: #5b6b7f;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --shadow-card: 0 1px 2px rgb(15 28 46 / 0.05), 0 1px 3px rgb(15 28 46 / 0.06);
+}
+
+html {
+  background: var(--color-canvas);
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+dialog::backdrop {
+  background: rgb(15 28 46 / 0.5);
+}

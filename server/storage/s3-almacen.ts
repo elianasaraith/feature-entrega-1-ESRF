@@ -1,4 +1,4 @@
-import { type AlmacenDocumentos, AlmacenError, VIDA_URL_SEGUNDOS } from "./almacen";
+import { type AlmacenDocumentos, AlmacenError, AlmacenPrecondicionError, normalizarEtag, VIDA_URL_SEGUNDOS } from "./almacen";
 import { prefirmarUrl } from "./s3-sigv4";
 
 // Almacén S3-compatible (Cloudflare R2, AWS S3, Backblaze B2) con direccionamiento
@@ -48,6 +48,8 @@ export function createS3Almacen(
 
   return {
     async urlSubida(clave, { mimeType, tamanoBytes }) {
+      // Nunca se emite permiso de escritura para una clave definitiva (seguridad-mvp).
+      if (!clave.startsWith("tmp/")) throw new AlmacenError("Solo se permite subir a claves temporales");
       const cabeceras = { "content-length": String(tamanoBytes), "content-type": mimeType };
       return { url: firmar("PUT", clave, { cabeceras }), metodo: "PUT", headers: { "content-type": mimeType }, expiraEnSegundos: VIDA_URL_SEGUNDOS };
     },
@@ -66,22 +68,24 @@ export function createS3Almacen(
       if (!r.ok) throw new AlmacenError(`El almacenamiento respondió ${r.status}`);
       const largo = Number(r.headers.get("content-length"));
       if (!Number.isFinite(largo)) throw new AlmacenError("Respuesta del almacenamiento sin tamaño");
-      return { tamanoBytes: largo, contentType: r.headers.get("content-type") };
+      return { tamanoBytes: largo, contentType: r.headers.get("content-type"), etag: normalizarEtag(r.headers.get("etag")) };
     },
     // GET con Range (cabecera no firmada); se lee solo el inicio y se cancela el resto.
-    async leerInicio(clave, n) {
+    async leerInicio(clave, n, etag) {
       let r: Response;
       try {
         r = await fetchFn(firmar("GET", clave), {
           method: "GET",
-          headers: { range: `bytes=0-${n - 1}` },
+          headers: { range: `bytes=0-${n - 1}`, ...(etag ? { "if-match": `"${etag}"` } : {}) },
           signal: AbortSignal.timeout(5000),
         });
       } catch {
         throw new AlmacenError("No se pudo comunicar con el almacenamiento");
       }
       if (r.status === 404) return null;
+      if (r.status === 412) throw new AlmacenPrecondicionError();
       if (!r.ok || !r.body) throw new AlmacenError(`El almacenamiento respondió ${r.status}`);
+      const etagRespuesta = normalizarEtag(r.headers.get("etag"));
       const lector = r.body.getReader();
       const partes: Uint8Array[] = [];
       let total = 0;
@@ -103,7 +107,29 @@ export function createS3Almacen(
         pos += trozo.length;
         if (pos >= salida.length) break;
       }
-      return salida;
+      return { bytes: salida, etag: etagRespuesta };
+    },
+    // CopyObject por URL prefirmada: `x-amz-copy-source` y `x-amz-copy-source-if-match`
+    // van firmadas. Un 200 puede traer un <Error> en el cuerpo (comportamiento de S3).
+    async copiarCondicional(origen, destino, etag) {
+      const cabeceras = {
+        "x-amz-copy-source": `/${cfg.bucket}/${origen.split("/").map(encodeURIComponent).join("/")}`,
+        "x-amz-copy-source-if-match": `"${etag}"`,
+      };
+      let r: Response;
+      try {
+        r = await fetchFn(firmar("PUT", destino, { cabeceras }), {
+          method: "PUT",
+          headers: cabeceras,
+          signal: AbortSignal.timeout(10000),
+        });
+      } catch {
+        throw new AlmacenError("No se pudo comunicar con el almacenamiento");
+      }
+      if (r.status === 412) throw new AlmacenPrecondicionError();
+      if (!r.ok) throw new AlmacenError(`El almacenamiento respondió ${r.status}`);
+      const cuerpo = await r.text().catch(() => "");
+      if (/<Error>/i.test(cuerpo)) throw new AlmacenError("El almacenamiento rechazó la copia");
     },
     async borrar(clave) {
       const r = await llamar("DELETE", clave);

@@ -22,7 +22,7 @@ export default function LoginPage() {
     try {
       const result = await signIn("credentials", { email, password, redirect: false });
       if (result?.error) {
-        setError("Email o contraseña incorrectos.");
+        setError("Email o contraseña incorrectos, o demasiados intentos. Inténtalo de nuevo más tarde.");
         return;
       }
       router.push("/dashboard");

@@ -94,8 +94,11 @@ export function isRealCalendarDate(value: string): boolean {
 }
 
 // Texto opcional: vacío o solo espacios → null.
+export const TEXTO_NOMBRE_MAXIMO = 255;
+export const TEXTO_LIBRE_MAXIMO = 1000;
 export const optionalText = z
   .string()
+  .max(TEXTO_LIBRE_MAXIMO, `Máximo ${TEXTO_LIBRE_MAXIMO} caracteres`)
   .nullish()
   .transform((v) => {
     const trimmed = v?.trim();

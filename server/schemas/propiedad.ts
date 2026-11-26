@@ -6,7 +6,7 @@ import { isRealCalendarDate, optionalText, positiveDecimal } from "./shared";
 
 export const propiedadInputSchema = z
   .object({
-    numeroDepartamento: z.string().trim().min(1, "Obligatorio"),
+    numeroDepartamento: z.string().trim().min(1, "Obligatorio").max(255, "Máximo 255 caracteres"),
     direccion: optionalText,
     superficieM2: positiveDecimal(6, 2),
     valorCompraMonto: positiveDecimal(10, 4),

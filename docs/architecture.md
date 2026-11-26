@@ -467,6 +467,204 @@ roles y recuperación de contraseña. El MVP es de usuario único.
 - Las respuestas de error no exponen detalles internos (§17).
 - Los datos reales del Excel se cargan **anonimizados** (§14), regla de `CLAUDE.md`.
 
+### 11.3 Endurecimiento previo al despliegue público (`seguridad-mvp`)
+
+*Implementado y probado en el sandbox con simulaciones; las verificaciones contra servicios reales
+están pendientes (§11.5).* Cada control responde a un hallazgo de la auditoría previa.
+
+| Control | Decisión |
+|---|---|
+| Límite de intentos de login | Tabla `login_intento` en PostgreSQL (compartida entre instancias serverless; **nunca en memoria**). Ventana fija de 15 min: **5 intentos por cuenta** y **20 por IP**. Cada intento se *reserva* con una sola sentencia atómica (`INSERT … ON CONFLICT DO UPDATE … RETURNING`) **antes** de verificar la contraseña, de modo que solicitudes concurrentes reciben contadores distintos y no superan el límite. El éxito reinicia el contador de la cuenta. Si PostgreSQL falla, el acceso se **deniega** (cierre por defecto) |
+| Claves del contador | HMAC-SHA256 (con `AUTH_SECRET`) de la cuenta o de la IP: la tabla no guarda emails ni IP en claro. Los emails inexistentes comparten la cuenta genérica `desconocida` y se acotan por IP, así que el almacén no crece con emails arbitrarios. Limpieza acotada: hasta 50 registros vencidos hace más de 1 día **en cada intento**, también en los denegados |
+| IP del cliente | Solo `x-vercel-forwarded-for` (Vercel la sobrescribe) cuando `VERCEL` está definida; `x-forwarded-for` y `x-real-ip` se ignoran siempre. Las direcciones IPv6 se agrupan por /64 (rotar dirección dentro del bloque no crea cubos ni filas nuevos). Fuera de Vercel todas las solicitudes comparten el cubo `local`. Sin `AUTH_SECRET` en producción el acceso se cierra |
+| Umbral por IP (20) | **Propuesta a validar**: tolera NAT y el uso de varios evaluadores y limita la fuerza bruta a ≈80 intentos/hora por IP. Constante única en `server/auth/login-limiter.ts` |
+| Enumeración de usuarios | Mensaje único y genérico. El email inexistente verifica Argon2id contra un hash de relleno válido; un intento bloqueado por cuenta también ejecuta Argon2id contra el relleno (**paridad de coste**), sin verificar nunca contra el hash de la cuenta bloqueada. Si no, agotar el cubo genérico y medir tiempos revelaría qué emails existen. Email normalizado (recorte, minúsculas, ≤254) y contraseña ≤1024 |
+| Sesión | **8 horas absolutas**: `maxAge` de 8 h y, como Auth.js vuelve a firmar el JWT al leer la sesión (renovación deslizante), el callback `jwt` guarda `authTime` al iniciar sesión y devuelve `null` pasadas 8 h, lo que invalida la sesión. Un token anterior sin `authTime` **se invalida** (Auth.js reinicia `iat` en cada lectura, así que medirlo por `iat` lo haría renovable sin límite): obliga a iniciar sesión una vez tras el despliegue. No hay revocación global antes de las 8 h |
+| Rutas privadas | Matcher del proxy **exacto** (no por prefijo: `/login-admin` o `/api/authx` quedan protegidos). Los layouts de `/dashboard` y `/propiedades` verifican la sesión por sí mismos (`GuardiaSesion`, bajo `<Suspense>` por Cache Components) y cada Route Handler conserva `requireSession` |
+| CSRF | El callback `authorized` del proxy exige, en toda mutación (`POST/PUT/PATCH/DELETE`) a la API o a páginas (cubre también Server Actions), un `Origin` incluido en `APP_ORIGINS`; sin `Origin` solo acepta `Sec-Fetch-Site: same-origin`. En producción sin `APP_ORIGINS` rechaza todo (403). `/api/auth/*` queda fuera: Auth.js conserva su propio CSRF. Más `SameSite` de la cookie |
+| Tamaño de solicitud | `Content-Length` > 1 MiB → 413 en `/api/*`. Los textos libres tienen `.max()` (255 nombres, 1000 texto libre) y se rechazan con 400, nunca se truncan |
+| Cabeceras | `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, HSTS y CSP en todas las rutas (`next.config.ts` ← `server/http/cabeceras.ts`); sin `X-Powered-By` |
+
+**CSP y riesgo residual de `'unsafe-inline'`.** `script-src 'self' 'unsafe-inline'` (+ `'unsafe-eval'`
+solo en desarrollo): Next.js inyecta scripts de hidratación en línea y una CSP con *nonce* obliga a
+renderizar dinámicamente todas las páginas, incompatible con Cache Components. **Se pierde la
+defensa de la CSP frente a un XSS que inyecte un `<script>` en línea.** Se mitiga con la ausencia de
+`dangerouslySetInnerHTML`, el escape por defecto de React, `object-src 'none'`, `base-uri 'self'`,
+`form-action 'self'`, `frame-ancestors 'none'` y `connect-src` limitado al origen propio y al host
+de `S3_ENDPOINT` (limita la exfiltración y permite la subida directa). `img-src 'self' data:` y
+`font-src 'self'` (las fuentes de `next/font` se autoalojan). El host de R2 se lee de `S3_ENDPOINT`
+**en tiempo de build**: la variable debe existir en el build de Vercel. Si la CSP rompiera algo en
+el navegador, la contingencia es emitirla como `Content-Security-Policy-Report-Only` cambiando una
+sola cabecera en `server/http/cabeceras.ts`.
+
+**Limitaciones del MVP.** Un tercero puede bloquear la cuenta 15 minutos con intentos fallidos (DoS
+de login inherente al bloqueo por cuenta; se repite mientras dure el abuso; recuperación: esperar la ventana o
+ejecutar `DELETE FROM login_intento` en la base); no hay MFA, revocación global de sesiones, Redis ni
+antivirus de documentos; el límite de intentos cubre solo el login (no hay limitación general de la
+API); la limpieza de reservas es oportunista (sin tarea programada).
+
+**Revisión independiente de los cambios** (subagente de seguridad de solo lectura; sin ejecución contra
+PostgreSQL ni R2). 9 hallazgos, ninguno crítico:
+
+| ID | Hallazgo | Disposición |
+|---|---|---|
+| R-01 (medio) | Un token anterior al cambio, medido por `iat`, se renovaría sin límite | **Corregido**: un token sin `authTime` se invalida |
+| R-02 (medio) | Un tercero puede mantener bloqueada la cuenta repitiendo 5 intentos por ventana | **Aceptado y documentado** (compromiso de diseño; ver limitaciones y recuperación) |
+| R-03 (medio) | `login_intento` podría crecer con muchas IPs distintas (p. ej. rotación IPv6) | **Corregido**: limpieza acotada en cada intento y agrupación IPv6 por /64 |
+| R-04 (bajo) | Argon2 sin tope de longitud en la rama bloqueada | **Corregido**: la longitud se comprueba antes de cualquier Argon2 (el tope de 1 MiB del proxy no cubre `Transfer-Encoding: chunked`, acotado por la plataforma) |
+| R-05 (bajo) | Un commit confirmado con respuesta perdida podía revertir el objeto del documento ya creado | **Corregido**: si la reserva está `COMPLETADA` no se revierte y se devuelve el documento |
+| R-06 (bajo) | Una URL PUT reutilizada tras registrar dejaba un temporal huérfano sin limpiar | **Corregido**: la limpieza de reservas completadas borra también su clave temporal (además del *Lifecycle*) |
+| R-07 (bajo) | Ruta ambigua `/api/auth/..` frente al matcher | **Cubierto con prueba**: el parser de URL la normaliza antes del proxy; sin evidencia de elusión |
+| R-08 (bajo) | Sal del HMAC con valor constante y `connect-src` fijado en build | **Corregido** (sin `AUTH_SECRET` en producción se cierra el acceso); el redeploy tras cambiar `S3_ENDPOINT` queda documentado (falla cerrado) |
+| R-09 (bajo) | ETag débil tratado como fuerte | **Corregido**: solo se acepta un ETag MD5 de 32 hex |
+
+La revisión confirmó como sólidos: cadena de ETag, clave definitiva no expuesta, reclamo atómico, cuotas con
+*advisory lock*, SQL parametrizado y sin *fallback* de `DOCUMENT_UPLOAD_SECRET`.
+
+### 11.4 Riesgo residual de dependencias (evidencia)
+
+Dependencias actualizadas a mano y conservadas: `next` 16.4.6, `zod` 4.6.7; `prisma` y `@prisma/client`
+**6.19.3** (sin *downgrade* ni migración a 7/8, sin *overrides*, sin `npm audit fix`, ESLint sin actualizar).
+
+*Vulnerabilidades aceptadas* (cadena `@prisma/client` →(peer opcional) `prisma` → `@prisma/config` →
+`deepmerge-ts` 7.1.5 / `effect` 3.21.0, y `minimatch` bajo `typescript-eslint`):
+
+| Paquete | Aviso | Alcanzabilidad (evidencia) | Riesgo |
+|---|---|---|---|
+| `deepmerge-ts` < 8.0.0 (alta) | GHSA-ggr8-5vv4-36mx, agotamiento de pila con grafos recursivos | Solo lo carga `@prisma/config` (CLI). `@prisma/client/runtime` y `.prisma/client` no hacen `require` de `@prisma/config`, `effect` ni `deepmerge-ts`; no hay `prisma.config.ts`; el código propio no los importa | Runtime: ninguno. Build: despreciable (entrada = nuestro `schema.prisma`) |
+| `effect` ≤ 3.22.0 (alta) | GHSA-7589-6fvf-x4pw, ReDoS en `Schema.TemplateLiteral` | `@prisma/config` usa `Schema.Struct/String/Union/Array…`; **no** usa `Schema.TemplateLiteral` | Runtime: ninguno |
+| `@prisma/config`, `prisma`, `@prisma/client` (altas) | Heredadas de las anteriores | `prisma` está en `devDependencies`; npm lo marca `devOptional` por ser peer opcional de `@prisma/client`, por eso `--omit=dev` lo sigue mostrando | Solo CLI en build/migraciones |
+| `minimatch` (moderadas, cadena ESLint) | GHSA-g3hv-75wg-m249, DoS por *globparts* | Solo `npm run lint`, con patrones propios | Desarrollo; nulo en producción |
+
+*Sin versión corregida compatible:* `@prisma/config@6.19.3` fija `deepmerge-ts` 7.1.5 y `effect` 3.21.0; las
+versiones corregidas (`deepmerge-ts` 8.x, `effect` 3.22.x) exigirían *overrides* no probados con Prisma 6.19.3
+(descartados por decisión) o migrar a Prisma 7 (fuera de alcance). **Criterio de reevaluación:** cuando
+Prisma publique una 6.x con la cadena corregida o se migre de versión mayor.
+
+**El resultado filtrado del audit NO prueba ausencia de vulnerabilidades.** `npm audit --omit=dev
+--omit=optional --omit=peer` reporta 0 porque excluye precisamente el peer opcional `prisma`; se cita
+siempre junto con el audit completo. Salida obtenida el 25-nov-2026 (se retiran las líneas `npm notice`):
+
+`npm audit`
+
+```text
+# npm audit report
+
+deepmerge-ts  
+Severity: high
+DeepmergeTS has stack exhaustion when merging recursive object graphs - https://github.com/advisories/GHSA-ggr8-5vv4-36mx
+No fix available
+node_modules/deepmerge-ts
+  @prisma/config  
+  Depends on vulnerable versions of deepmerge-ts
+  Depends on vulnerable versions of effect
+  node_modules/@prisma/config
+    prisma  
+    Depends on vulnerable versions of @prisma/config
+    node_modules/prisma
+      @prisma/client  
+      Depends on vulnerable versions of prisma
+      node_modules/@prisma/client
+
+effect  
+Severity: high
+Effect: ReDoS in Schema.TemplateLiteral compiled regex - https://github.com/advisories/GHSA-7589-6fvf-x4pw
+No fix available
+node_modules/effect
+
+minimatch  
+Severity: moderate
+minimatch has potential denial of service via globparts amplification - https://github.com/advisories/GHSA-g3hv-75wg-m249
+No fix available
+node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch
+  @typescript-eslint/typescript-estree  
+  Depends on vulnerable versions of minimatch
+  node_modules/@typescript-eslint/typescript-estree
+    @typescript-eslint/parser  
+    Depends on vulnerable versions of @typescript-eslint/typescript-estree
+    node_modules/@typescript-eslint/parser
+      @typescript-eslint/eslint-plugin  
+      Depends on vulnerable versions of @typescript-eslint/parser
+      Depends on vulnerable versions of @typescript-eslint/type-utils
+      Depends on vulnerable versions of @typescript-eslint/utils
+      node_modules/@typescript-eslint/eslint-plugin
+        typescript-eslint  
+        Depends on vulnerable versions of @typescript-eslint/eslint-plugin
+        Depends on vulnerable versions of @typescript-eslint/parser
+        Depends on vulnerable versions of @typescript-eslint/typescript-estree
+        Depends on vulnerable versions of @typescript-eslint/utils
+        node_modules/typescript-eslint
+          eslint-config-next  
+          Depends on vulnerable versions of typescript-eslint
+          node_modules/eslint-config-next
+    @typescript-eslint/type-utils  
+    Depends on vulnerable versions of @typescript-eslint/typescript-estree
+    Depends on vulnerable versions of @typescript-eslint/utils
+    node_modules/@typescript-eslint/type-utils
+    @typescript-eslint/utils  
+    Depends on vulnerable versions of @typescript-eslint/typescript-estree
+    node_modules/@typescript-eslint/utils
+
+13 vulnerabilities (8 moderate, 5 high)
+
+Some issues need review, and may require choosing
+a different dependency.
+```
+
+`npm audit --omit=dev`
+
+```text
+# npm audit report
+
+deepmerge-ts  
+Severity: high
+DeepmergeTS has stack exhaustion when merging recursive object graphs - https://github.com/advisories/GHSA-ggr8-5vv4-36mx
+No fix available
+node_modules/deepmerge-ts
+  @prisma/config  
+  Depends on vulnerable versions of deepmerge-ts
+  Depends on vulnerable versions of effect
+  node_modules/@prisma/config
+    prisma  
+    Depends on vulnerable versions of @prisma/config
+    node_modules/prisma
+      @prisma/client  
+      Depends on vulnerable versions of prisma
+      node_modules/@prisma/client
+
+effect  
+Severity: high
+Effect: ReDoS in Schema.TemplateLiteral compiled regex - https://github.com/advisories/GHSA-7589-6fvf-x4pw
+No fix available
+node_modules/effect
+
+5 high severity vulnerabilities
+
+Some issues need review, and may require choosing
+a different dependency.
+```
+
+`npm audit --omit=dev --omit=optional --omit=peer` (**filtrado**, no es evidencia de ausencia de vulnerabilidades)
+
+```text
+found 0 vulnerabilities
+```
+
+### 11.5 Verificaciones pendientes antes del despliegue público
+
+No se pudieron comprobar en el sandbox (sin red, sin puertos locales y sin aplicar migraciones):
+
+1. Aplicar las migraciones nuevas en la base de pruebas y ejecutar las pruebas de integración
+   (`*.integration.test.ts`): concurrencia del limitador, cuotas con *advisory lock*, reclamo atómico.
+   El SQL crudo (`login-intento-store.ts`, `documento-reservas.ts`) **no se ha ejecutado** contra PostgreSQL.
+2. **R2 real:** (a) que el ETag de un objeto subido con URL prefirmada sea el MD5 de su contenido y se
+   conserve tras `CopyObject`; (b) que la copia con `x-amz-copy-source` prefirmada funcione; (c) si R2 respeta
+   `x-amz-copy-source-if-match` (optimización; la garantía no depende de ello, §13.2). Si (a) o (b) fallan, el
+   mecanismo de promoción **no queda resuelto** y debe sustituirse (p. ej. checksum SHA-256 firmado).
+3. CSP en navegador real (hidratación, gráficos, subida directa a R2) y cabeceras con `curl -I` en producción.
+4. Cookies (`httpOnly`, `Secure`, `SameSite`), `AUTH_SECRET`, `APP_ORIGINS` y `sslmode=require` en Vercel/Neon.
+5. `next build` con Turbopack (en el sandbox solo compiló con `--webpack` y fuentes simuladas).
+
 ---
 
 ## 12. Integración con la API de UF
@@ -616,32 +814,64 @@ sequenceDiagram
     participant S as Object storage
     participant D as PostgreSQL
 
-    N->>A: solicitar URL de subida
-    A->>S: firmar URL
-    A-->>N: URL firmada + clave del objeto
-    N->>S: subir el archivo (directo)
-    N->>A: registrar metadata (clave, nombre, tipo, tamaño)
-    A->>D: insertar fila en documento
+    N->>A: solicitar subida (tipo, nombre, formato, tamaño)
+    A->>D: cuotas + reserva PENDIENTE (transacción con lock)
+    A->>S: firmar URL PUT de la clave temporal tmp/...
+    A-->>N: URL firmada + storageKey temporal + tokenSubida
+    N->>S: subir el archivo (directo, solo a tmp/...)
+    N->>A: registrar (storageKey, tokenSubida, metadata)
+    A->>D: reclamar reserva (un solo uso, atómico)
+    A->>S: HEAD → ETag E; leer primeros bytes (comprobar E)
+    A->>S: copiar tmp/... → propiedades/... (condicionada a E)
+    A->>S: HEAD del definitivo (ETag = E)
+    A->>D: insertar documento + reserva COMPLETADA (transacción)
+    A->>S: borrar la clave temporal
 ```
 
-*Seguridad de la subida (implementado).* La solicitud devuelve un `tokenSubida` (HMAC-SHA256 con
-`S3_SECRET_ACCESS_KEY`, solo servidor, sobre clave + tipo + tamaño + vencimiento de 10 min) que
-el registro exige: el cliente no puede registrar una clave que el servidor no emitió ni cambiar lo
-autorizado. La URL de subida (5 min) firma `Content-Type` y `Content-Length`. Al registrar, el
-servidor no confía en lo declarado: inspecciona el objeto, compara tamaño y `Content-Type` y lee
-los primeros 12 bytes para validar la firma del formato (PDF, JPEG, PNG, WebP); un objeto que no
-cumple se borra. Formatos permitidos: PDF, JPEG, PNG y WebP; máximo 20 MB (confirmados).
-Las credenciales viven solo en variables de entorno del servidor (nunca `NEXT_PUBLIC_*`) y no se
+*Subida en dos fases (`seguridad-mvp`).* La URL firmada de subida (5 min, con `Content-Type` y
+`Content-Length` firmados) solo permite escribir en una **clave temporal** `tmp/propiedades/{id}/{uuid}`.
+El backend valida el objeto y lo **promueve** a la clave definitiva `propiedades/{id}/{uuid}` (la misma
+forma de siempre, así los documentos anteriores siguen funcionando); el navegador **nunca** recibe
+permiso de escritura sobre una clave definitiva, por lo que reutilizar una URL firmada no puede
+modificar un documento registrado. La solicitud crea una **reserva** (`documento_subida`) y devuelve
+un `tokenSubida` (HMAC-SHA256 con el secreto independiente `DOCUMENT_UPLOAD_SECRET`, sin *fallback* a las
+credenciales de R2 ni a `AUTH_SECRET`; sobre reserva + clave + tipo + tamaño + vencimiento de 10 min). El
+registro **consume la reserva de forma atómica** (`UPDATE … WHERE estado = PENDIENTE`, un solo ganador entre
+solicitudes concurrentes; el token es de un solo uso) y es idempotente: repetirlo con la reserva completada
+devuelve el mismo documento (200). La clave se valida con una forma exacta
+(`^tmp/propiedades/{id}/{uuid}$`).
+
+*Garantía «el objeto promovido son los bytes validados».* Solo se acepta un ETag que sea el MD5 del contenido (32 hex; un ETag débil `W/` o de *multipart* se rechaza y el objeto se descarta: fallo cerrado). El servidor fija el ETag `E` del objeto temporal
+(HEAD), lee los primeros bytes **y compara el ETag que devuelve esa misma respuesta con `E`**, copia con
+`x-amz-copy-source-if-match: E` y comprueba que el objeto definitivo tiene ETag `E` y el tamaño validado.
+La garantía **no depende de que R2 respete los condicionales**: si el temporal cambia en cualquier punto, un
+ETag difiere, la promoción se rechaza y el definitivo se elimina. Se apoya en que el ETag de una carga de
+una parte es el MD5 del contenido; **ese supuesto y la copia prefirmada deben comprobarse en R2 real** antes
+de publicar (§11.5); hasta entonces el riesgo está mitigado en código y **no se da por resuelto**. La validación
+cubre tamaño, `Content-Type` y firma de formato (PDF, JPEG, PNG, WebP; 20 MB); un objeto que no cumple se
+borra. Las credenciales viven solo en variables de entorno del servidor (nunca `NEXT_PUBLIC_*`) y no se
 registran en logs; el DTO de documento no expone la clave del objeto.
 
-### 13.3 Objeto huérfano
+*Cuotas de la demostración* (se evalúan y reservan en una transacción serializada con `pg_advisory_xact_lock`,
+contando documentos y reservas pendientes vigentes; las vencidas no cuentan; no afectan a documentos ya
+registrados): 20 MB por documento, 50 documentos y 200 MB por propiedad, 1 GB global. Exceder una → 422.
 
-Si el proceso se interrumpe entre la subida y el registro de la metadata, queda un objeto en
-el bucket sin fila que lo referencie.
+### 13.3 Objetos temporales, reservas vencidas y objetos huérfanos
 
-Para un MVP de usuario único basta con **reconocerlo**: no justifica una máquina de estados
-ni un proceso de reconciliación. Si llegara a molestar, un script de limpieza que compare
-claves contra la tabla lo resuelve.
+- **Reservas vencidas:** en cada solicitud de subida se limpian, hasta 20 por vez, las reservas abandonadas
+  (vencidas hace más de 5 min; una confirmación reciente en proceso no se toca). Se **reclaman
+  atómicamente** (`EXPIRADA`) antes de borrar su objeto temporal y, solo si ningún `documento` lo referencia,
+  el definitivo. Las reservas `COMPLETADA` con más de 1 día se eliminan (solo la fila). No hay tarea programada.
+- **Fallos parciales:** si falla la inserción tras la promoción se elimina el objeto definitivo y la reserva
+  vuelve a `PENDIENTE` (reintentable con el mismo token mientras no venza); nunca queda una fila sin objeto. Si
+  falla el borrado del temporal queda un objeto huérfano.
+- **Respaldo (configuración manual en Cloudflare R2, no automatizada):** regla *Lifecycle* sobre el prefijo
+  `tmp/` que **expire los objetos a las 24 horas** (R2 expresa la expiración en días; mínimo 1 día).
+  Paneles: *R2 → bucket → Settings → Object lifecycle rules → Add rule → prefijo `tmp/` → Delete uploaded
+  objects after 1 day*.
+- **CORS del bucket (manual):** permitir `PUT` desde cada origen de `APP_ORIGINS` con la cabecera `Content-Type`.
+- Un objeto definitivo huérfano (borrado de fila sin borrado del objeto) se reconoce y se registra, como antes;
+  un script que compare claves contra la tabla lo limpiaría si molestara.
 
 ---
 
@@ -704,7 +934,9 @@ las necesidades concretas de las pruebas sobre vistas previa.
 | Cadena de conexión *pooled* | Acceso de la aplicación a PostgreSQL |
 | Cadena de conexión directa | Migraciones y tareas administrativas |
 | Secreto de firma de sesión | Firma del JWT de Auth.js |
-| Credenciales del object storage | Clave, secreto, región y bucket |
+| Credenciales del object storage | Clave, secreto, región y bucket (`S3_*`). `S3_ENDPOINT` también alimenta el `connect-src` de la CSP **en tiempo de build** |
+| `DOCUMENT_UPLOAD_SECRET` | Secreto **independiente** de los tokens de subida de documentos (solo servidor). Sin él las subidas responden 503; no hay *fallback* a otra credencial |
+| `APP_ORIGINS` | Orígenes confiables para mutaciones, separados por comas (p. ej. `https://realtytrack.vercel.app`). En producción es **obligatoria**: sin ella toda mutación se rechaza (403) |
 | URL base del proveedor de UF (`UF_API_BASE_URL`, opcional) | Endpoint de la API pública; por defecto `https://findic.cl/api/uf` |
 
 **Reglas**

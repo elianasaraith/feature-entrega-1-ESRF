@@ -23,7 +23,9 @@ export async function POST(request: Request, { params }: Context) {
   try {
     const { id } = await params;
     const body = await request.json().catch(() => null);
-    return Response.json(await documentoService.registrar(id, registroSchema.parse(body)), { status: 201 });
+    const { documento, creado } = await documentoService.registrarConEstado(id, registroSchema.parse(body));
+    // 201 al crear; 200 si el mismo token ya había completado el registro (idempotente).
+    return Response.json(documento, { status: creado ? 201 : 200 });
   } catch (error) {
     return toHttpResponse(error);
   }

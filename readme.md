@@ -180,7 +180,7 @@ Prisma las lee de `.env`), `SEED_USER_EMAIL` y `SEED_USER_PASSWORD` (credenciale
 usuario único que crean los seeds), el secreto de sesión de Auth.js (`AUTH_SECRET`,
 estándar de Auth.js v5; confirma su nombre en `.env.example`) y, solo para las pruebas
 de integración, `TEST_DATABASE_URL`. Para documentos, las cinco variables `S3_*` descritas en «Configuración de
-documentos». Opcionalmente `UF_API_BASE_URL` (endpoint de la API de
+documentos» y `DOCUMENT_UPLOAD_SECRET`. Para la protección CSRF, `APP_ORIGINS` (obligatoria en producción). Opcionalmente `UF_API_BASE_URL` (endpoint de la API de
 UF; por defecto `https://findic.cl/api/uf`, sin API key). Para la base local de Docker Compose la URL tiene
 la forma `postgresql://realtytrack:<contraseña de docker-compose.yml>@localhost:5436/realtytrack`.
 
@@ -303,10 +303,14 @@ automatizada, pero **no se comprobó visualmente**. Detalle: `docs/work-tickets.
 - *Montos de arriendo:* corrección y eliminación de reajustes, y alta de reajustes, solo si no
   cambian pagos con abonos (422 en caso contrario); el escenario con abonos queda pendiente de
   decisión de negocio (`docs/work-tickets.md` §4.5).
-- *Documentos (T11):* subida directa a un bucket privado S3-compatible (Cloudflare R2), URLs
-  firmadas de 5 minutos, token de subida emitido por el servidor y validación del objeto real
-  (tamaño, `Content-Type`, firma de formato); PDF, JPEG, PNG y WebP, máximo 20 MB. Subida,
-  descarga y eliminación física validadas contra R2 real.
+- *Documentos (T11 + `seguridad-mvp`):* subida directa a un bucket privado S3-compatible (Cloudflare R2),
+  URLs firmadas de 5 minutos, token de subida de un solo uso y validación del objeto real (tamaño,
+  `Content-Type`, firma de formato); PDF, JPEG, PNG y WebP, máximo 20 MB. **Subida en dos fases:** el navegador
+  solo escribe en una clave temporal (`tmp/…`); el backend valida el objeto, fija su ETag y lo promueve a la
+  clave definitiva, sobre la que el navegador nunca tiene permiso de escritura (una URL firmada reutilizada no
+  puede modificar un documento registrado). Cuotas de la demostración: 50 documentos y 200 MB por propiedad,
+  1 GB global. Subida, descarga y eliminación física se validaron contra R2 real **antes** de este cambio; el
+  flujo de promoción está probado con simulaciones y **pendiente de verificar contra R2 real**.
 
 **Configuración de documentos (Cloudflare R2).** Variables de entorno **solo de servidor** (nunca
 `NEXT_PUBLIC_*`): `S3_ENDPOINT` (`https://<cuenta>.r2.cloudflarestorage.com`), `S3_REGION`
@@ -315,6 +319,21 @@ acceso público), un token de API S3 con lectura y escritura limitadas a ese buc
 CORS que permita `PUT` desde el origen de la aplicación con la cabecera `Content-Type`. Sin
 estas variables la aplicación funciona y las operaciones de documentos responden 503. La
 migración `20261123120000_add_documento` debe aplicarse antes (`npx prisma migrate deploy`).
+
+**Cambios de `seguridad-mvp` que exigen configuración (no automatizada):**
+
+- *Migraciones nuevas, pendientes de aplicar* (aditivas, sin tocar datos):
+  `20261125120000_add_login_intento` y `20261125120100_add_documento_subida`. Primero en la base de pruebas
+  (`TEST_DATABASE_URL`) y luego `npx prisma migrate deploy` en Neon con la conexión directa.
+- *Variables nuevas:* `DOCUMENT_UPLOAD_SECRET` (secreto de los tokens de subida; generar un valor aleatorio
+  largo, distinto de `AUTH_SECRET` y de las credenciales de R2) y `APP_ORIGINS` (p. ej.
+  `https://<tu-app>.vercel.app`; sin ella toda mutación de la API se rechaza). `S3_ENDPOINT` debe estar definida
+  también **en el build** (alimenta el `connect-src` de la CSP; si cambia hay que reconstruir). `AUTH_SECRET` es
+  obligatorio en producción (sin él el acceso se cierra). Tras el despliegue las sesiones emitidas antes se
+  invalidan una vez. `.env.example` debe listarlas (pendiente: no pude editarlo, ver informe).
+- *Cloudflare R2:* regla *Lifecycle* que expire los objetos del prefijo `tmp/` a 1 día (24 h) y CORS del
+  bucket con `PUT` desde cada origen de `APP_ORIGINS` y la cabecera `Content-Type`.
+- *Build:* `npm run build` ejecuta `prisma generate && next build`.
 
 **Pendiente antes de la entrega final (jueves 26 de noviembre de 2026):** pruebas E2E, revisión de seguridad, despliegue público (Vercel y Neon, propuesto) y preparación de la entrega final.
 
@@ -482,19 +501,47 @@ Detalle: [docs/architecture.md](docs/architecture.md) §15.
 - Pruebas de integración aisladas: solo escriben en `TEST_DATABASE_URL`, distinta de la
   base de desarrollo.
 
-**Previsto, no implementado:**
+**Endurecimiento previo al despliegue público (`seguridad-mvp`, implementado y probado con simulaciones;
+verificaciones reales pendientes):**
 
-- Atributos de cookie `httpOnly` + `Secure` + `SameSite` verificados en despliegue.
-- Bucket de documentos privado; el acceso es siempre por URL firmada de vida
-  corta, nunca público.
-- Sin prefijo público de Next.js en credenciales (regla de diseño aplicable a las
-  futuras variables del object storage).
+- *Login:* límite persistente en PostgreSQL (serverless-safe) de **5 intentos por cuenta y 20 por IP cada
+  15 minutos**, con reserva atómica del intento antes de verificar, claves HMAC (sin emails ni IP en claro), IP
+  tomada solo de la cabecera de Vercel y cierre por defecto si PostgreSQL falla. Mensaje único y genérico;
+  verificación Argon2id contra un hash de relleno cuando el email no existe (y también ante un intento
+  bloqueado, para igualar el coste y evitar la enumeración por tiempos).
+- *Sesión:* 8 horas **absolutas** (el JWT no puede renovarse más allá). Los layouts privados verifican la sesión
+  por sí mismos, el matcher del proxy es exacto y cada Route Handler conserva `requireSession`.
+- *CSRF:* toda mutación (API y páginas) exige un `Origin` de `APP_ORIGINS` (o `Sec-Fetch-Site: same-origin`);
+  `/api/auth/*` conserva el CSRF propio de Auth.js. Cuerpo máximo de 1 MiB (413) y `.max()` en los textos libres.
+- *Cabeceras:* CSP, HSTS, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`; sin
+  `X-Powered-By`. **Riesgo residual:** `script-src` mantiene `'unsafe-inline'` (hidratación de Next.js con Cache
+  Components; una CSP con *nonce* obligaría a renderizado dinámico): la CSP no frenaría un XSS en línea; se
+  compensa con `object-src 'none'`, `base-uri`, `form-action`, `frame-ancestors` y `connect-src` acotado.
+- *Documentos:* subida en dos fases con promoción (ver §2.4), token de un solo uso con el secreto independiente
+  `DOCUMENT_UPLOAD_SECRET`, cuotas con reservas y limpieza de temporales.
+- Bucket de documentos privado; el acceso es siempre por URL firmada de vida corta, nunca público.
+- Sin prefijo público de Next.js en credenciales.
+
+**Riesgos residuales de dependencias (aceptados, documentados con la salida completa de `npm audit` en
+[docs/architecture.md](docs/architecture.md) §11.4):** `deepmerge-ts`, `effect`, `@prisma/config`/`prisma`
+(cadena del CLI de Prisma 6.19.3: no la carga el runtime de `@prisma/client`, sin `prisma.config.ts`, sin
+`Schema.TemplateLiteral`) y `minimatch` (solo `npm run lint`). `npm audit` completo: 13 (8 moderadas, 5 altas).
+El resultado filtrado (`--omit=dev --omit=optional --omit=peer`, 0) **no** prueba ausencia de vulnerabilidades.
+
+**Limitaciones del MVP:** un tercero puede bloquear la cuenta 15 minutos; sin MFA ni revocación global de
+sesiones; el límite de intentos cubre solo el login; limpieza de reservas oportunista (sin tarea programada).
+
+**Verificaciones pendientes antes de publicar:** aplicar las migraciones y ejecutar las pruebas de integración en
+la base de pruebas (el SQL crudo no se ha ejecutado contra PostgreSQL); en R2 real, que el ETag sea el MD5 del
+contenido y se conserve tras `CopyObject`, y que la copia prefirmada funcione (si no, la promoción **no queda
+resuelta**); la CSP en un navegador real; cabeceras, cookies, `AUTH_SECRET`, `APP_ORIGINS` y `sslmode=require` en
+Vercel/Neon; y `next build` con Turbopack. Detalle en [docs/architecture.md](docs/architecture.md) §11.5.
 
 **Regla de datos (vigente):** los datos reales de las propiedades se anonimizan antes de
 versionar (nombres, RUT, direcciones, montos, documentos) y se cargan por un script de
 seed controlado, no por un importador; el seed actual solo contiene datos ficticios.
 
-Detalle: [docs/architecture.md](docs/architecture.md) §11, §16.
+Detalle: [docs/architecture.md](docs/architecture.md) §11, §13, §16.
 
 ### **2.6. Tests**
 
@@ -505,21 +552,63 @@ Detalle: [docs/architecture.md](docs/architecture.md) §11, §16.
 > la API (`tests/auth/proxy.test.ts`) y la integración de UF: cliente con `fetch` simulado,
 > concurrencia máxima y corte anticipado, persistencia idempotente, y equivalentes de crédito,
 > registro mensual y dashboard con cálculos financieros idénticos con y sin UF.
-> No hay pruebas extremo a extremo automatizadas ni de componentes de interfaz; la
-> interfaz se verificó manualmente. La tabla describe la estrategia completa, incluidos
-> los niveles aún no implementados.
+> Existen cinco pruebas extremo a extremo con Playwright (`npm run test:e2e`, ver «Pruebas
+> E2E» abajo), **no ejecutadas en el entorno de desarrollo asistido por IA** (sandbox sin
+> PostgreSQL, puerto local ni descarga de Chromium): su ejecución la confirma la persona en
+> local (las dos primeras ya pasaron). No hay pruebas de componentes de interfaz; la interfaz se verificó
+> manualmente. La tabla describe la estrategia completa.
 
 | Nivel | Qué cubriría | Por qué ahí |
 |---|---|---|
 | Unitario sobre el dominio | Precedencia de los cuatro estados del pago y sus calificaciones, fecha de completitud, monto vigente ante reajuste retroactivo, conversión UF→CLP | Funciones puras; se prueban con tablas de casos, sin base de datos |
 | Integración de servicios | Invariantes que la base no impone: no solapamiento de contratos, documento coherente con su propiedad, monto esperado alineado con `contrato_monto` | Requieren PostgreSQL real |
 | API | Códigos de estado, validación de entrada, control de acceso | Es el contrato de la capa REST |
-| Extremo a extremo | Un recorrido por HU01, HU02 y HU03 | *Propuesta a validar*: el valor está en los dos primeros niveles |
+| Extremo a extremo | Un flujo principal completo: login, propiedad, contrato, pago, dashboard y cierre de sesión | Implementado con Playwright (cinco escenarios por área, no un recorrido por cada historia); el mayor valor sigue en los dos primeros niveles |
 
 Los casos límite ya documentados en
 [docs/user-stories.md](docs/user-stories.md) (HU01 CL10–CL12, HU02 CL11–CL15,
 HU03 CL12–CL14) están escritos para traducirse directamente en casos de
 prueba, sin reinterpretarlos.
+
+#### Pruebas E2E (Playwright)
+
+Cinco escenarios independientes con Chromium sobre la aplicación real (frontend, API y
+PostgreSQL, sin mocks de servicios de negocio). Cada uno inicia sesión y crea su propia
+propiedad:
+
+| Escenario | Archivo | Aserciones principales |
+|---|---|---|
+| Credenciales inválidas | `flujo-principal.spec.ts` | Mensaje genérico y permanencia en `/login` |
+| Flujo principal | `flujo-principal.spec.ts` | Propiedad → contrato con arrendatario nuevo → pago «Pagado» → ingreso y flujo neto en el dashboard → cierre de sesión (`/dashboard` redirige a `/login`, API 401) |
+| Gestión hipotecaria | `hipoteca.spec.ts` | Crédito con 20 % de pie (600 UF sobre 3000 UF), edición a 25 % (750 UF) tras recargar, dividendo y saldo en el registro mensual |
+| Gestión financiera | `finanzas.spec.ts` | Gasto de $120.000 persistido en el listado; dashboard de marzo 2025 con egresos $120.000 y flujo neto -$120.000; navegación de mes con selector, encabezado y cifras sincronizados |
+| Gestión de arriendos | `arriendos.spec.ts` | Edición persistida del arrendatario; reajuste a $450.000 desde julio; 12 pagos esperados con $400.000 antes de julio y $450.000 desde julio |
+
+Fechas deterministas (meses fijos del pasado salvo el flujo principal, que usa el mes en
+curso) y meses distintos por escenario para que las cifras exactas del dashboard no se
+contaminen. La UF se obtiene de un proveedor simulado local (`e2e/uf-stub.mjs`, puerto 3101,
+sin red) y no se usa R2. Estado: los dos primeros escenarios fueron ejecutados por la persona en local
+(2 passed); los tres nuevos están **implementados y pendientes de ejecución local**.
+
+- **Aislamiento y repetibilidad:** solo usa `TEST_DATABASE_URL`, que debe ser una base
+  **exclusiva de pruebas** (distinta de `DATABASE_URL`/`DIRECT_URL` y con «test» o «e2e» en el
+  nombre; si no, la ejecución aborta). Antes de cada ejecución vacía todas las tablas de esa
+  base, incluido el contador de intentos de login, y siembra un usuario ficticio, por lo que
+  puede repetirse y no hay fallos por el límite de intentos. **No la use con datos que quiera
+  conservar.** Los datos y credenciales son ficticios (`e2e/datos.ts`).
+- **Servidor:** Playwright levanta `next dev` en el puerto 3100 apuntando a la base de
+  pruebas; detenga antes cualquier otro `next dev` de este directorio.
+
+```bash
+# una vez: dependencias y navegador
+npm install
+npm run test:e2e:install
+
+# en .env (o en el entorno): una base exclusiva de pruebas
+#   TEST_DATABASE_URL="postgresql://…/realtytrack_e2e_test"
+npm run test:e2e:db     # lee .env, valida la guarda y aplica migraciones solo a TEST_DATABASE_URL
+npm run test:e2e        # ejecuta la prueba (informe en playwright-report/)
+```
 
 Detalle: [docs/architecture.md](docs/architecture.md) §18.
 

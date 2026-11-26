@@ -81,6 +81,8 @@ generar los artefactos OpenSpec. Después se implementó, se verificó contra lo
 | **Decisiones de producto y de diseño de T10**: proveedor findic.cl, día 1 como referencia, puerto independiente, sin estimar ni reutilizar períodos, `Decimal` en las conversiones; referencia temporal propia de cada equivalente (saldo inicial con `fechaOtorgamiento`, saldo del dashboard con el mes consultado) | Prompts de T10 (sección 6); `docs/work-tickets.md` §4.10 |
 | **Recorte de infraestructura sin consumidores**: la persona pidió no implementar `UfNoDisponibleError` ni el 503; el criterio AC4 quedó documentado, no implementado | Prompt de ajuste de T10; `docs/architecture.md` §12.4 |
 | **Control de latencia con el proveedor caído**: la persona fijó el máximo de 6 llamadas simultáneas y aprobó, con reglas explícitas, un corte anticipado tras 6 fallos consecutivos (la serie vacía no cuenta como fallo) | Prompts de los grupos 6 de T10; `docs/architecture.md` §12.3 |
+| **Seguridad previa al despliegue público**: la persona exigió no dar por resuelta la integridad de la promoción de objetos en R2 sin garantía demostrable, no usar un audit filtrado como evidencia de ausencia de vulnerabilidades, no aplicar migraciones y separar lo comprobado de lo pendiente por limitaciones del sandbox | Prompt 3 de la sección 2.5; `docs/architecture.md` §11.3–11.5 y §13.2 |
+| **Prueba E2E del flujo principal (cierre de la entrega final)**: la persona acotó el flujo (login, propiedad, contrato, pago, dashboard, cierre de sesión), exigió PostgreSQL real, base de pruebas aislada, tolerancia al límite de intentos de login, selectores accesibles, sin esperas artificiales y solo la dependencia `@playwright/test`; se archivó `seguridad-mvp` antes; tras pasar las dos primeras pruebas, la persona amplió a cinco escenarios (hipoteca, finanzas, arriendos) exigiendo independencia, fechas deterministas, sin API de UF ni R2 y sin archivar hasta confirmar su ejecución local | Change `pruebas-e2e-mvp`; `e2e/`; `readme.md` 2.6 |
 | **Veracidad de la verificación de T10**: la persona exigió no afirmar ejecuciones sin evidencia del contador `skipped`, no asumir que una fecha futura carece de UF sin comprobar la respuesta real del proveedor, y registrar como salvedad que el crédito sin `fechaOtorgamiento` no se comprobó visualmente | Prompts de los grupos 7 a 9 de T10; `docs/work-tickets.md` §4.10 |
 
 ---
@@ -217,6 +219,18 @@ generar los artefactos OpenSpec. Después se implementó, se verificó contra lo
 *Mismo mensaje de corrección citado en 2.2 y 2.3 (punto 3 de 3).*
 
 > 3. En §11 evita comprometer el documento con detalles internos de "rotación" de Auth.js. Di simplemente que Auth.js gestiona la creación, protección y lectura de la sesión y su cookie, manteniendo como decisiones explícitas Credentials + JWT + cookie httpOnly/Secure/SameSite + Argon2id.
+
+**Prompt 2 (auditoría previa al despliegue público, modo exploración de OpenSpec, solo lectura):**
+
+> Utiliza un subagente especializado en seguridad para realizar una revisión independiente y de solo lectura. […] Revisa: autenticación y sesiones, API y base de datos, almacenamiento Cloudflare R2, secretos y configuración, dependencias y frontend. […] Distingue entre vulnerabilidades confirmadas mediante evidencia, riesgos potenciales pendientes de verificar y mejoras recomendables que no bloquean la entrega. […] Considera que Vercel utiliza una arquitectura serverless: no propongas mecanismos de rate limiting exclusivamente en memoria. […] Solo diagnóstico. No modificar archivos, no instalar dependencias, no exponer secretos.
+
+*Resultado:* informe con hallazgos S-01…S-15; la persona revisó después las dependencias de Prisma por separado (no *downgrade*, no *overrides*, no migrar a Prisma 7/8).
+
+**Prompt 3 (implementación del change `seguridad-mvp`, `/opsx:propose` → `/opsx:apply`):**
+
+> Garantizar que el objeto definitivo corresponde al contenido validado, incluso ante escrituras concurrentes. Si R2 no permite garantizarlo mediante el mecanismo propuesto, no darlo por resuelto. […] Conservar Prisma 6.19.3 y documentar las vulnerabilidades residuales. No presentar un audit filtrado como prueba de ausencia de vulnerabilidades. […] No aplicar migraciones a ninguna base de datos. […] Ejecuta las verificaciones disponibles y distingue claramente entre resultados comprobados y verificaciones pendientes por limitaciones del sandbox. […] Detente antes de `/opsx:verify`.
+
+*Resultado:* una prueba unitaria expuso un fallo de diseño (el cubo de emails inexistentes permitía enumerar por tiempos) y se corrigió con paridad de coste; la revisión independiente posterior de los cambios se documenta en `docs/architecture.md` §11.
 
 ### **2.6. Tests**
 

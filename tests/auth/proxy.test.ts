@@ -17,6 +17,10 @@ import { proxy } from "../../proxy";
 // la misma situación). Se castea explícitamente para esta prueba.
 type ProxyFn = (request: NextRequest) => Promise<Response | undefined>;
 
+// Las mutaciones deben venir de un origen confiable (seguridad-mvp): en pruebas, el
+// predeterminado fuera de producción (http://localhost:3000).
+const ORIGEN = { origin: "http://localhost:3000" };
+
 test("ruta protegida sin sesión redirige a /login", async () => {
   const request = new NextRequest(new URL("http://localhost:3000/"));
   const response = await (proxy as unknown as ProxyFn)(request);
@@ -37,7 +41,7 @@ test("API del crédito sin sesión responde 401 JSON", async () => {
   for (const method of ["GET", "POST", "PUT"]) {
     const request = new NextRequest(
       new URL(`http://localhost:3000/api/propiedades/${id}/credito`),
-      { method }
+      { method, headers: ORIGEN }
     );
     const response = await (proxy as unknown as ProxyFn)(request);
     assert.equal(response?.status, 401, method);
@@ -53,7 +57,7 @@ test("API del registro mensual sin sesión responde 401 JSON", async () => {
   ];
   for (const [ruta, metodos] of casos) {
     for (const method of metodos) {
-      const request = new NextRequest(new URL(`http://localhost:3000${ruta}`), { method });
+      const request = new NextRequest(new URL(`http://localhost:3000${ruta}`), { method, headers: ORIGEN });
       const response = await (proxy as unknown as ProxyFn)(request);
       assert.equal(response?.status, 401, `${method} ${ruta}`);
       assert.deepEqual(await response?.json(), { error: "No autenticado" });
@@ -72,7 +76,7 @@ test("API de contratos y arrendatarios sin sesión responde 401 JSON", async () 
   ];
   for (const [ruta, metodos] of casos) {
     for (const method of metodos) {
-      const request = new NextRequest(new URL(`http://localhost:3000${ruta}`), { method });
+      const request = new NextRequest(new URL(`http://localhost:3000${ruta}`), { method, headers: ORIGEN });
       const response = await (proxy as unknown as ProxyFn)(request);
       assert.equal(response?.status, 401, `${method} ${ruta}`);
       assert.deepEqual(await response?.json(), { error: "No autenticado" });
@@ -90,7 +94,7 @@ test("API de pagos esperados y abonos sin sesión responde 401 JSON", async () =
   ];
   for (const [ruta, metodos] of casos) {
     for (const method of metodos) {
-      const request = new NextRequest(new URL(`http://localhost:3000${ruta}`), { method });
+      const request = new NextRequest(new URL(`http://localhost:3000${ruta}`), { method, headers: ORIGEN });
       const response = await (proxy as unknown as ProxyFn)(request);
       assert.equal(response?.status, 401, `${method} ${ruta}`);
       assert.deepEqual(await response?.json(), { error: "No autenticado" });
@@ -107,7 +111,7 @@ test("API de movimientos financieros sin sesión responde 401 JSON", async () =>
   ];
   for (const [ruta, metodos] of casos) {
     for (const method of metodos) {
-      const request = new NextRequest(new URL(`http://localhost:3000${ruta}`), { method });
+      const request = new NextRequest(new URL(`http://localhost:3000${ruta}`), { method, headers: ORIGEN });
       const response = await (proxy as unknown as ProxyFn)(request);
       assert.equal(response?.status, 401, `${method} ${ruta}`);
       assert.deepEqual(await response?.json(), { error: "No autenticado" });

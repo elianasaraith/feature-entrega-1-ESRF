@@ -11,7 +11,7 @@ export const subidaSchema = z
   .object({
     tipo: z.enum(TIPOS_DOCUMENTO),
     nombreArchivo: z.string().trim().min(1, "Obligatorio").max(255, "Máximo 255 caracteres"),
-    mimeType: z.string().trim().min(1, "Obligatorio"),
+    mimeType: z.string().trim().min(1, "Obligatorio").max(100, "Máximo 100 caracteres"),
     tamanoBytes: z.number().int("Debe ser un entero"),
     vinculo: vinculoSchema.nullish(),
   })
@@ -24,9 +24,10 @@ export const subidaSchema = z
   });
 
 export const registroSchema = subidaSchema.safeExtend({
-  storageKey: z.string().trim().min(1, "Obligatorio"),
+  // Clave TEMPORAL emitida por el servidor (la forma exacta se valida en el servicio).
+  storageKey: z.string().trim().min(1, "Obligatorio").max(512, "Máximo 512 caracteres"),
   // Autorización emitida por el servidor al solicitar la subida.
-  tokenSubida: z.string().trim().min(1, "Obligatorio"),
+  tokenSubida: z.string().trim().min(1, "Obligatorio").max(512, "Máximo 512 caracteres"),
 });
 
 export type SubidaInput = z.output<typeof subidaSchema>;

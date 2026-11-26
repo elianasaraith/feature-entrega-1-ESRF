@@ -23,5 +23,6 @@ export const pagoService = createPagoService(prisma);
 export const movimientoService = createMovimientoService(prisma);
 export const dashboardService = createDashboardService(prisma, ufService);
 export const documentoService = createDocumentoService(prisma, almacenDesdeEntorno(), {
-  secretoToken: process.env.S3_SECRET_ACCESS_KEY ?? null,
+  // Secreto independiente de las credenciales del almacén y de AUTH_SECRET; sin él, 503.
+  secretoToken: process.env.DOCUMENT_UPLOAD_SECRET || null,
 });

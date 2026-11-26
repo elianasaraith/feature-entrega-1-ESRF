@@ -45,7 +45,7 @@ const optionalDecimal = (schema: z.ZodType<string>) =>
     .transform((v) => v ?? null);
 
 export const creditoInputSchema = z.object({
-  banco: z.string().trim().min(1, "Obligatorio"),
+  banco: z.string().trim().min(1, "Obligatorio").max(255, "Máximo 255 caracteres"),
   numeroCredito: optionalText,
   fechaOtorgamiento: z
     .union([

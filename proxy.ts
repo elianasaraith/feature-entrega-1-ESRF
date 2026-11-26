@@ -14,6 +14,11 @@ import { authConfig } from "./auth.config";
 const { auth } = NextAuth(authConfig);
 export const proxy = auth;
 
+// Patron EXACTO (seguridad-mvp): se excluyen solo la pantalla de acceso (`/login` y
+// `/login/...`), `/api/auth/...`, los estaticos de Next y el favicon. Una exclusion por
+// prefijo dejaria sin proteccion rutas futuras como `/login-admin` o `/api/authx`.
+// Debe ser un literal: Next lo analiza de forma estatica (tests/auth/matcher.test.ts lo
+// evalua con el mismo compilador de matchers que usa Next).
 export const config = {
-  matcher: ["/((?!login|api/auth|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!login$|login/|api/auth/|_next/static/|_next/image(?:/|$)|favicon\\.ico$).*)"],
 };

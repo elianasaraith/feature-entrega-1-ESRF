@@ -607,6 +607,8 @@ archivo vive en object storage compatible con S3, referenciado por `storage_key`
 `tipo_documento`; las cuatro FK específicas usan `ON DELETE SET NULL` (un abono o movimiento
 eliminado deja el documento localizable desde su propiedad) y `propiedad_id` usa `RESTRICT`;
 `CHECK` de exclusividad y `tamano_bytes > 0` en la migración; índice `(propiedad_id, subido_en)`.
+*`seguridad-mvp`:* los documentos nuevos guardan en `storage_key` la clave **definitiva** (promovida desde una clave
+temporal; ver §4.15); el formato `propiedades/{propiedad_id}/{uuid}` no cambia.
 
 | Atributo | Tipo | Nulo | Restricción | Descripción |
 |---|---|---|---|---|
@@ -700,6 +702,48 @@ conserva (y solo acepta un `monto_clp` igual al total vigente); **`[]`** convier
 simple, exige un monto positivo y elimina los conceptos; **una lista** lo reemplaza por
 completo y el total se recalcula; **`null`** es un error de formato. Todo ocurre de forma
 atómica: o se aplica el movimiento con todos sus conceptos, o no cambia nada.
+
+### 4.15 `documento_subida`
+
+Reserva de subida de un solo uso (`seguridad-mvp`; migración `20261125120100_add_documento_subida`,
+**pendiente de aplicar**). Soporta la subida en dos fases (`docs/architecture.md` §13.2): el navegador
+solo escribe en `clave_temporal` y el backend promueve el objeto validado a `clave_definitiva`. Las
+reservas `PENDIENTE` y `EN_PROCESO` vigentes cuentan para las cuotas de documentos. **No guarda binarios
+ni credenciales.** Los documentos registrados antes de este cambio no tienen reserva y no la necesitan:
+`documento.storage_key` conserva su clave `propiedades/{propiedad_id}/{uuid}`.
+
+| Atributo | Tipo | Nulo | Restricción | Descripción |
+|---|---|---|---|---|
+| `id` | UUID | no | PK | Identificador; forma parte del token de subida |
+| `propiedad_id` | UUID | no | FK → `propiedad`, `ON DELETE CASCADE` | Propiedad a la que se sube |
+| `tipo` | `tipo_documento` | no | | Tipo autorizado |
+| `nombre_archivo` | texto | no | | Nombre autorizado |
+| `mime_type` | texto | no | | Formato autorizado |
+| `tamano_bytes` | entero grande | no | `> 0` (CHECK) | Tamaño autorizado |
+| `clave_temporal` | texto | no | única | `tmp/propiedades/{propiedad_id}/{uuid}` |
+| `clave_definitiva` | texto | no | única; distinta de la temporal (CHECK) | `propiedades/{propiedad_id}/{uuid}` |
+| `estado` | `estado_subida` | no | `PENDIENTE` \| `EN_PROCESO` \| `COMPLETADA` \| `EXPIRADA` | Ciclo de vida de la reserva |
+| `expira_en` | fecha-hora con zona | no | | Fin de la vigencia (10 min); libera cupo |
+| `reclamada_en` | fecha-hora con zona | sí | | Inicio de la confirmación en curso (se reclama de nuevo pasados 60 s) |
+| `documento_id` | UUID | sí | única; FK → `documento`, `ON DELETE SET NULL` | Documento creado al completar (idempotencia) |
+| `creada_en` | fecha-hora con zona | no | por defecto ahora | Retención de las completadas (1 día) |
+
+Índices: `(propiedad_id, estado, expira_en)` y `(estado, expira_en)`.
+
+### 4.16 `login_intento`
+
+Contador de intentos de acceso por ventana fija (`seguridad-mvp`; migración
+`20261125120000_add_login_intento`, **pendiente de aplicar**). Una fila por cuenta o por IP.
+
+| Atributo | Tipo | Nulo | Restricción | Descripción |
+|---|---|---|---|---|
+| `clave` | texto | no | PK | `cuenta:<HMAC>` o `ip:<HMAC>`; **nunca** el email ni la IP en claro. Los emails inexistentes usan la cuenta genérica |
+| `contador` | entero | no | `>= 0` (CHECK) | Intentos en la ventana actual |
+| `ventana_inicio` | fecha-hora con zona | no | índice | Inicio de la ventana de 15 min; al vencer, el contador vuelve a 1 |
+| `actualizado_en` | fecha-hora con zona | no | por defecto ahora | Última actualización |
+
+Límites: 5 por cuenta y 20 por IP por ventana. Se eliminan de forma acotada (50 por ejecución) los registros
+con ventana anterior a 1 día. Sin relaciones con el resto del modelo.
 
 ---
 

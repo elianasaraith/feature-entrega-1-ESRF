@@ -36,6 +36,7 @@ model Propiedad {
   contratos   ContratoArriendo[]
   movimientos MovimientoFinanciero[]
   documentos  Documento[]
+  subidas     DocumentoSubida[]
 
   @@map("propiedad")
 }
@@ -309,7 +310,57 @@ model Documento {
   contrato             ContratoArriendo?     @relation(fields: [contratoId], references: [id], onDelete: SetNull)
   abonoArriendo        AbonoArriendo?        @relation(fields: [abonoArriendoId], references: [id], onDelete: SetNull)
   movimientoFinanciero MovimientoFinanciero? @relation(fields: [movimientoFinancieroId], references: [id], onDelete: SetNull)
+  subida               DocumentoSubida?
 
   @@index([propiedadId, subidoEn])
   @@map("documento")
+}
+
+// Estado de una reserva de subida (seguridad-mvp, docs/data-model.md §4.13).
+enum EstadoSubida {
+  PENDIENTE
+  EN_PROCESO
+  COMPLETADA
+  EXPIRADA
+
+  @@map("estado_subida")
+}
+
+// Reserva de subida de un solo uso: la URL firmada solo escribe en `clave_temporal`;
+// el backend valida y promueve el objeto a `clave_definitiva`, que el navegador nunca
+// recibe permiso de escribir. Las reservas PENDIENTE/EN_PROCESO vigentes cuentan para
+// las cuotas. No guarda binarios ni credenciales.
+model DocumentoSubida {
+  id              String        @id @default(uuid()) @db.Uuid
+  propiedadId     String        @map("propiedad_id") @db.Uuid
+  tipo            TipoDocumento
+  nombreArchivo   String        @map("nombre_archivo")
+  mimeType        String        @map("mime_type")
+  tamanoBytes     BigInt        @map("tamano_bytes")
+  claveTemporal   String        @unique @map("clave_temporal")
+  claveDefinitiva String        @unique @map("clave_definitiva")
+  estado          EstadoSubida  @default(PENDIENTE)
+  expiraEn        DateTime      @map("expira_en") @db.Timestamptz(6)
+  reclamadaEn     DateTime?     @map("reclamada_en") @db.Timestamptz(6)
+  documentoId     String?       @unique @map("documento_id") @db.Uuid
+  creadaEn        DateTime      @default(now()) @map("creada_en") @db.Timestamptz(6)
+
+  propiedad Propiedad  @relation(fields: [propiedadId], references: [id], onDelete: Cascade)
+  documento Documento? @relation(fields: [documentoId], references: [id], onDelete: SetNull)
+
+  @@index([propiedadId, estado, expiraEn])
+  @@index([estado, expiraEn])
+  @@map("documento_subida")
+}
+
+// Contador de intentos de acceso por ventana fija (seguridad-mvp). La clave es un HMAC
+// de la cuenta o de la IP: no se guarda ningún email ni IP en claro.
+model LoginIntento {
+  clave         String   @id
+  contador      Int
+  ventanaInicio DateTime @map("ventana_inicio") @db.Timestamptz(6)
+  actualizadoEn DateTime @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+
+  @@index([ventanaInicio])
+  @@map("login_intento")
 }

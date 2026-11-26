@@ -52,7 +52,7 @@ function terminoNoAnterior(c: Fechas, ctx: z.RefinementCtx) {
 export const contratoCrearSchema = z
   .object({
     ...camposContrato,
-    arrendatarioId: z.string().trim().min(1).nullish(),
+    arrendatarioId: z.string().trim().min(1).max(64, "Máximo 64 caracteres").nullish(),
     arrendatario: arrendatarioInputSchema.nullish(),
     montoMensualClp: vacioANull(positiveIntegerText(14)),
   })
@@ -74,7 +74,7 @@ export const contratoCrearSchema = z
 export const contratoActualizarSchema = z
   .object({
     ...camposContrato,
-    arrendatarioId: z.string().trim().min(1, "Obligatorio"),
+    arrendatarioId: z.string().trim().min(1, "Obligatorio").max(64, "Máximo 64 caracteres"),
   })
   .superRefine(terminoNoAnterior);
 

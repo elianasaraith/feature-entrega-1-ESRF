@@ -25,6 +25,50 @@ export function errorDeArchivo(mimeType: string, tamanoBytes: number): string | 
 
 export const prefijoClave = (propiedadId: string) => `propiedades/${propiedadId}/`;
 
+// --- Subida en dos fases (seguridad-mvp, design.md D9-D11) ---------------------------
+// El navegador solo recibe permiso de escritura sobre una clave TEMPORAL; el backend
+// valida el objeto y lo promueve a una clave DEFINITIVA distinta (`propiedades/...`, el
+// formato de siempre) sobre la que el navegador nunca tiene URL de escritura.
+const UUID_PARTE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+export const prefijoTemporal = (propiedadId: string) => `tmp/propiedades/${propiedadId}/`;
+export const claveTemporal = (propiedadId: string, uuid: string) => `${prefijoTemporal(propiedadId)}${uuid}`;
+export const claveDefinitiva = (propiedadId: string, uuid: string) => `${prefijoClave(propiedadId)}${uuid}`;
+// Forma exacta `tmp/propiedades/{propiedadId}/{uuid}`: sin segmentos extra ni `..`.
+export function esClaveTemporalDe(clave: string, propiedadId: string): boolean {
+  const m = new RegExp(`^tmp/propiedades/(${UUID_PARTE})/(${UUID_PARTE})$`, "i").exec(clave);
+  return m !== null && m[1].toLowerCase() === propiedadId.toLowerCase();
+}
+
+// Cuotas de la demostración. Parámetros únicos.
+export const MAX_DOCUMENTOS_PROPIEDAD = 50;
+export const MAX_BYTES_PROPIEDAD = 200 * 1024 * 1024;
+export const MAX_BYTES_GLOBAL = 1024 * 1024 * 1024;
+// Vigencia de la reserva (y del token de subida): la URL firmada dura 5 min y el
+// registro debe seguirla.
+export const VIDA_RESERVA_SEGUNDOS = 600;
+// Una confirmación EN_PROCESO sin completarse se puede reclamar de nuevo pasado este plazo.
+export const RECLAMO_ABANDONADO_SEGUNDOS = 60;
+// Margen tras el vencimiento antes de borrar objetos de una reserva (no pisar confirmaciones en curso).
+export const MARGEN_LIMPIEZA_SEGUNDOS = 300;
+export const COMPLETADAS_RETENCION_SEGUNDOS = 24 * 60 * 60;
+export const LIMPIEZA_LOTE = 20;
+
+export type UsoDocumentos = { documentosPropiedad: number; bytesPropiedad: number; bytesGlobal: number };
+
+// null si el nuevo archivo cabe en todas las cuotas; si no, el motivo (422).
+export function errorDeCuota(uso: UsoDocumentos, nuevoBytes: number): string | null {
+  if (uso.documentosPropiedad + 1 > MAX_DOCUMENTOS_PROPIEDAD) {
+    return `La propiedad alcanzó el máximo de ${MAX_DOCUMENTOS_PROPIEDAD} documentos`;
+  }
+  if (uso.bytesPropiedad + nuevoBytes > MAX_BYTES_PROPIEDAD) {
+    return "La propiedad excedería el máximo de 200 MB de documentos";
+  }
+  if (uso.bytesGlobal + nuevoBytes > MAX_BYTES_GLOBAL) {
+    return "Se alcanzó el límite de almacenamiento de documentos de la demostración (1 GB)";
+  }
+  return null;
+}
+
 // Bytes iniciales que debe leer el servidor para comprobar el formato real.
 export const BYTES_FIRMA = 12;
 

@@ -9,6 +9,7 @@
     "lint": "eslint",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:user": "tsx prisma/seed-user.ts",
+    "db:seed:demo": "node --env-file=.env.production.local --import tsx prisma/seed-demo.ts",
     "db:verify": "tsx scripts/verify-db-connection.ts",
     "test": "node --env-file-if-exists=.env --require ./tests/setup/stub-server-only.cjs --import tsx --test \"tests/**/*.test.ts\"",
     "test:e2e": "playwright test",

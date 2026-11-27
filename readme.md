@@ -1,6 +1,7 @@
 ## Índice
 
 0. [Ficha del proyecto](#0-ficha-del-proyecto)
+   - [0.6. Flujos del proyecto a verificar](#06-flujos-del-proyecto-a-verificar)
 1. [Descripción general del producto](#1-descripción-general-del-producto)
 2. [Arquitectura del sistema](#2-arquitectura-del-sistema)
 3. [Modelo de datos](#3-modelo-de-datos)
@@ -77,6 +78,133 @@ actuales.
 Los cambios de la entrega final, incluido el cierre documental, se integran en `main`; la rama
 `final-project-esrf` se mantiene para cumplir los requisitos del máster. Las ramas
 `feature/entrega-1-ESRF` y `feature/entrega-2-ESRF` conservan las entregas anteriores.
+
+### 0.6. Flujos del proyecto a verificar
+
+Guía de evaluación manual sobre la demo (<https://realtytrack.vercel.app>), con las
+credenciales de la sección 0.4. Recorra los flujos **en orden**: en el flujo 2 creará una
+propiedad propia que se usa en los flujos 3 a 7, de modo que los resultados no dependan de
+datos que otros puedan modificar. Los departamentos de ejemplo (101-A, 205-B y 310-C) sirven
+para explorar el histórico; evite modificarlos.
+
+En los pasos, **mes actual** y **mes anterior** son relativos al día de la evaluación; las
+fechas de pago, abono y gasto son **hoy**. Los importes indicados son ficticios.
+
+| Flujo | Relación |
+|---|---|
+| 1. Autenticación | Complementaria |
+| 2. Propiedades y créditos | HU01 (*must-have*) |
+| 3. Arriendos | HU02 (*must-have*) |
+| 4. Control de pagos | HU02 (*must-have*) |
+| 5. Gestión financiera | HU03 (*must-have*) |
+| 6. Dashboard financiero | HU03 (*must-have*) |
+| 7. Documentos | Complementaria |
+
+#### Flujo 1 — Autenticación (complementaria)
+
+**Objetivo:** comprobar el acceso protegido.
+
+1. Abra la URL, escriba el correo y la contraseña y pulse **Ingresar**.
+2. Pulse **Cerrar sesión** en el menú lateral (en pantallas pequeñas, abra antes el menú).
+3. Intente abrir `https://realtytrack.vercel.app/dashboard` y vuelva a iniciar sesión.
+
+**Resultado esperado:** el inicio de sesión lleva al dashboard; tras cerrar sesión,
+`/dashboard` redirige a la pantalla de acceso. No pruebe contraseñas erróneas repetidamente:
+la cuenta es compartida y puede bloquearse temporalmente.
+
+#### Flujo 2 — Propiedades y créditos hipotecarios (HU01)
+
+**Objetivo:** registrar una propiedad y su crédito, y ver los montos en UF y CLP.
+
+1. En **Propiedades**, pulse **Nueva propiedad**. Use un número de departamento reconocible y
+   no repetido (p. ej., `EVAL-` y un número), una superficie, valor de compra `3000` en **UF**
+   y una fecha de compra. Pulse **Guardar**.
+2. En el detalle de la propiedad, pulse **Editar**, cambie un dato (p. ej., la bodega) y guarde.
+3. En la pestaña **Crédito**, pulse **Registrar crédito**. Complete los campos obligatorios
+   (banco ficticio, cuota contractual en UF, tasa, número de cuotas y día de vencimiento), la
+   fecha de otorgamiento, un saldo inicial en UF y porcentaje de pie `20`.
+4. Revise el resumen; luego pulse **Editar**, cambie el pie a `25` y guarde.
+5. Entre en **Registro mensual** → **Registrar mes**: período = mes actual, dividendo pagado
+   `500000` CLP, fecha de pago = hoy y saldo pendiente `2200` UF.
+
+**Resultado esperado:** los cambios persisten; el pie estimado pasa de 600 UF a 750 UF; el mes
+muestra el dividendo en CLP y el saldo en UF. La cuota y los saldos se presentan en UF con su
+equivalente en CLP. Si el valor de la UF no está disponible (servicio externo), se indica
+«No disponible» y el resto sigue funcionando.
+
+#### Flujo 3 — Arriendos (HU02)
+
+**Objetivo:** registrar arrendatario, contrato, montos y un reajuste.
+
+1. En la pestaña **Contratos** de su propiedad, pulse **Nuevo contrato**.
+2. Elija arrendatario **Nuevo** con un nombre ficticio (deje el RUT vacío). Use como inicio el
+   día 1 del **mes anterior**, un término cerca de un año después, un día esperado de pago y un
+   monto inicial de `400000` CLP. Guarde.
+3. En el contrato, use **Editar arrendatario**, cambie un dato ficticio y guarde.
+4. Abra **Montos** y, en **Registrar reajuste**, indique que rige desde el **mes actual**, con
+   `450000` CLP.
+5. Pulse **Sincronizar pagos esperados**.
+6. En la fila del reajuste, pulse **Corregir**, cambie el monto a `460000` y guarde.
+
+**Resultado esperado:** el contrato conserva su identidad y el historial muestra ambos montos.
+En **Pagos**, el mes anterior espera $400.000 y el mes actual $460.000.
+
+#### Flujo 4 — Control de pagos (HU02)
+
+**Objetivo:** comprobar abonos, estados, saldos y la protección de pagos con abonos.
+
+1. Abra **Pagos** y ubique el **mes anterior**: está vencido y sin abonos.
+2. Pulse **Registrar abono**: `100000` CLP con fecha de hoy.
+3. Registre un segundo abono de `300000` CLP con fecha de hoy.
+4. Vuelva a **Montos**, intente **Corregir** el monto inicial a `410000` y guarde.
+
+**Resultado esperado:** tras el paso 2, el pago sigue **vencido**, indica abonos parciales,
+$100.000 recibidos y $300.000 de saldo. Tras el paso 3 queda **pagado**, con la indicación de
+atraso y saldo cero. El paso 4 se **rechaza** (HTTP 422), porque cambiaría un pago con abonos:
+montos, pagos y abonos no varían. El estado del pago del mes actual depende del día de la
+evaluación.
+
+#### Flujo 5 — Gestión financiera (HU03)
+
+**Objetivo:** registrar un gasto simple y uno desglosado.
+
+1. En la pestaña **Movimientos** de su propiedad, pulse **Registrar movimiento**: fecha de
+   hoy, una categoría y monto `120000` CLP. Guarde.
+2. Registre otro, active **Desglosar en conceptos** y, con **Agregar concepto**, ingrese tres
+   conceptos con nombre y montos `60000`, `70000` y `20000`. Guarde.
+
+**Resultado esperado:** el segundo gasto totaliza $150.000 y es **un solo movimiento**. El
+total del mes de su propiedad es $270.000; el dividendo no figura como movimiento.
+
+#### Flujo 6 — Dashboard financiero (HU03)
+
+**Objetivo:** consultar el resultado mensual, el saldo hipotecario y el histórico.
+
+1. En la pestaña **Resumen** de su propiedad, revise el resumen del mes actual.
+2. Abra **Dashboard** y revise **Ingresos recibidos**, **Egresos**, **Flujo neto**, **Saldo
+   hipotecario**, **Resumen por propiedad** y los pagos de arriendo.
+3. Alterne el histórico entre **6 meses** y **12 meses** y revise los gráficos y la tabla.
+4. Cambie de mes con **Mes anterior** y **Mes siguiente**.
+
+**Resultado esperado:** si siguió los flujos 2 a 5 con esos importes, sin otras operaciones en
+su propiedad y registrando todo dentro del mismo mes, el mes actual de **su propiedad** muestra
+ingresos de $400.000, egresos de $770.000 ($500.000 de dividendo y $270.000 de gastos) y flujo
+neto de -$370.000. Los totales de cartera son ingresos menos egresos, pero sus cifras dependen
+de los datos compartidos. El saldo hipotecario consolida los créditos con saldo conocido y
+advierte si es parcial. Los gráficos muestran ingresos y egresos, y la evolución del flujo
+neto; las cifras y el encabezado cambian con el mes seleccionado.
+
+#### Flujo 7 — Documentos (complementaria)
+
+**Objetivo:** comprobar el ciclo completo de un documento.
+
+1. En la pestaña **Documentos** de su propiedad, seleccione un archivo de prueba **sin datos
+   reales** (PDF, JPEG, PNG o WebP, máximo 20 MB), elija tipo y asociación y pulse **Subir**.
+2. Compruebe que aparece en **Documentos de la propiedad** y pulse **Descargar**.
+3. Pulse **Eliminar** en ese documento y confirme. Elimine solo el que usted cargó.
+
+**Resultado esperado:** el documento se lista con su tipo, asociación y tamaño; la descarga
+entrega el archivo cargado y, tras eliminarlo, desaparece de la lista.
 
 ---
 

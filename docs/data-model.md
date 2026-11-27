@@ -233,6 +233,29 @@ erDiagram
         timestamptz subido_en "NOT NULL"
     }
 
+    DOCUMENTO_SUBIDA {
+        uuid id PK
+        uuid propiedad_id FK "NOT NULL"
+        tipo_documento tipo "NOT NULL"
+        text nombre_archivo "NOT NULL"
+        text mime_type "NOT NULL"
+        bigint tamano_bytes "NOT NULL - mayor que 0"
+        text clave_temporal UK "NOT NULL"
+        text clave_definitiva UK "NOT NULL"
+        estado_subida estado "NOT NULL"
+        timestamptz expira_en "NOT NULL"
+        timestamptz reclamada_en "NULL"
+        uuid documento_id FK "NULL - UNIQUE"
+        timestamptz creada_en "NOT NULL"
+    }
+
+    LOGIN_INTENTO {
+        text clave PK "HMAC de cuenta o IP"
+        integer contador "NOT NULL"
+        timestamptz ventana_inicio "NOT NULL"
+        timestamptz actualizado_en "NOT NULL"
+    }
+
     PROPIEDAD ||--o| CREDITO_HIPOTECARIO : "tiene como maximo uno"
     CREDITO_HIPOTECARIO ||--o{ CREDITO_REGISTRO_MENSUAL : "registra mes a mes"
     PROPIEDAD ||--o{ CONTRATO_ARRIENDO : "arrienda mediante"
@@ -247,6 +270,8 @@ erDiagram
     CONTRATO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
     ABONO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
     MOVIMIENTO_FINANCIERO ||--o{ DOCUMENTO : "respaldado por"
+    PROPIEDAD ||--o{ DOCUMENTO_SUBIDA : "reserva"
+    DOCUMENTO |o--o| DOCUMENTO_SUBIDA : "se completa desde"
 ```
 
 `USUARIO` y `VALOR_UF_PERIODO` no tienen relaciones: el primero solo guarda credenciales
@@ -445,9 +470,14 @@ desde un período.
 > el primer monto. La invariante «al menos una fila» queda **relajada** mientras tanto, y T05
 > la trata así: un contrato sin monto no genera pagos esperados. T05 registra el primer
 > monto (siempre con `vigente_desde_periodo` = mes de `fecha_inicio`) y los reajustes como
-> filas nuevas: nunca modifica ni elimina una fila anterior; un período fuera de la vigencia
+> filas nuevas: el alta no modifica ni elimina filas anteriores; un período fuera de la vigencia
 > del contrato se rechaza (422) y un período repetido también (409). La edición del contrato
 > (T04) nunca escribe en esta tabla.
+
+**Corrección y eliminación.** Además del alta, una fila puede corregirse (monto y motivo, no su
+período), incluida la inicial. Un reajuste puede eliminarse; el monto inicial no. El alta, la
+corrección y la eliminación se rechazan (422), sin cambios parciales, si modificarían el monto
+esperado de un pago con abonos; los abonos nunca se modifican.
 
 **El monto inicial es la primera fila, no una columna del contrato.** Esta es la decisión
 central de la entidad: hay una única fuente de verdad para el monto, y un reajuste deja de
@@ -458,7 +488,8 @@ arrendatario y su garantía (HU02 E3).
 mensual, y así se evita la pregunta del prorrateo a mitad de mes, que está fuera de alcance.
 
 Un **reajuste retroactivo** es una fila con `vigente_desde_periodo` anterior al mes en
-curso (HU02 E5). Sus efectos sobre los pagos ya generados se describen en §4.8 y §6.
+curso (HU02 E5). Solo actualiza pagos ya generados si ninguno de los que cambiarían tiene
+abonos; sus efectos se describen en §4.8 y §6.
 
 ### 4.8 `pago_esperado`
 
@@ -480,8 +511,9 @@ en día 1 (T05). Sin estado ni abonos: el estado es derivado (T06, §6.1).
 **Generación (T05).** Las filas solo las crea una **sincronización explícita** e idempotente,
 nunca un `GET` ni un proceso programado: desde el mes de `fecha_inicio` hasta el menor entre
 el mes en curso y el mes de `fecha_termino`, y solo si el contrato tiene un monto registrado.
-La sincronización no modifica ni elimina filas existentes; un reajuste solo actualiza
-`monto_esperado_clp` (y `updated_at`) de las filas existentes desde su período.
+La sincronización no modifica ni elimina filas existentes; el alta, la corrección o la
+eliminación de un monto solo actualizan `monto_esperado_clp` (y `updated_at`) de las filas
+afectadas desde su período, y nunca de pagos con abonos (§4.7).
 
 **Se persiste, en lugar de derivarse al vuelo**, por dos razones: los abonos necesitan una
 clave foránea estable a la que apuntar, y el producto exige que el pago esperado conserve el
@@ -706,7 +738,7 @@ atómica: o se aplica el movimiento con todos sus conceptos, o no cambia nada.
 ### 4.15 `documento_subida`
 
 Reserva de subida de un solo uso (`seguridad-mvp`; migración `20261125120100_add_documento_subida`,
-**pendiente de aplicar**). Soporta la subida en dos fases (`docs/architecture.md` §13.2): el navegador
+aplicada en Neon). Soporta la subida en dos fases (`docs/architecture.md` §13.2): el navegador
 solo escribe en `clave_temporal` y el backend promueve el objeto validado a `clave_definitiva`. Las
 reservas `PENDIENTE` y `EN_PROCESO` vigentes cuentan para las cuotas de documentos. **No guarda binarios
 ni credenciales.** Los documentos registrados antes de este cambio no tienen reserva y no la necesitan:
@@ -733,7 +765,7 @@ ni credenciales.** Los documentos registrados antes de este cambio no tienen res
 ### 4.16 `login_intento`
 
 Contador de intentos de acceso por ventana fija (`seguridad-mvp`; migración
-`20261125120000_add_login_intento`, **pendiente de aplicar**). Una fila por cuenta o por IP.
+`20261125120000_add_login_intento`, aplicada en Neon). Una fila por cuenta o por IP.
 
 | Atributo | Tipo | Nulo | Restricción | Descripción |
 |---|---|---|---|---|
@@ -765,6 +797,8 @@ con ventana anterior a 1 día. Sin relaciones con el resto del modelo.
 | `abono_arriendo` | 1 : 0..N | `documento` | Asociación opcional | Excluyente |
 | `movimiento_financiero` | 1 : 0..N | `documento` | Asociación opcional | Excluyente |
 | `movimiento_financiero` | 1 : 0..N | `movimiento_concepto` | Composición | `ON DELETE CASCADE`; sin conceptos = gasto simple |
+| `propiedad` | 1 : 0..N | `documento_subida` | Composición | `ON DELETE CASCADE` |
+| `documento` | 0..1 : 0..1 | `documento_subida` | Asociación opcional | `documento_id` único, `ON DELETE SET NULL` |
 
 ### 5.1 Restricciones que la base de datos no impone
 
@@ -773,7 +807,7 @@ Se validan en la capa de aplicación y se comprueban con tests:
 1. **Los contratos de una misma propiedad no se solapan en el tiempo.**
 2. **La entidad vinculada de un documento pertenece a su `propiedad_id`.**
 3. **`monto_esperado_clp` coincide con el monto que `contrato_monto` da para su período.**
-   Se restablece tras cada recálculo por reajuste.
+   Se restablece tras cada alta, corrección o eliminación de un monto.
 4. **El primer `contrato_monto` de un contrato tiene `vigente_desde_periodo` igual al mes
    de `fecha_inicio`**, y ninguna fila tiene vigencia anterior al inicio del contrato. Mientras
    exista esa fila, T04 rechaza (409) editar el mes de `fecha_inicio`, para no desalinearla
@@ -852,20 +886,20 @@ la fecha —no el abono— la que determina la calificación *pagado con atraso*
 quedaría obsoleta por sí sola, sin que nadie edite nada, y *pendiente → vencido* dejaría de
 ocurrir por el mero paso del tiempo.
 
-**Por qué la fecha de completitud tampoco.** Derivarla es lo que la hace correcta ante un
-reajuste retroactivo: si el reajuste **sube** el monto esperado, el acumulado puede dejar de
-alcanzarlo y el pago abandona `PAGADO` por la regla 2 o la 3; si lo **baja**, la fecha se
-adelanta sola al abono que ahora basta.
+**Por qué la fecha de completitud tampoco.** Derivarla es lo que la mantiene correcta cuando
+se edita o elimina un abono: si el acumulado deja de alcanzar el monto esperado, el pago
+abandona `PAGADO` por la regla 2 o la 3, y la fecha de completitud se recalcula desde los
+abonos vigentes. Los cambios de montos no pueden alterar el esperado de un pago con abonos
+(§4.7).
 
-**El orden de las reglas resuelve por sí solo los casos límite**, sin necesidad de un
-tratamiento especial para los reajustes:
+**El orden de las reglas resuelve por sí solo los casos límite**, cualquiera sea la causa:
 
 | Caso | Resultado | Por qué |
 |---|---|---|
 | Abonos por 620.000 sobre un esperado de 600.000 (HU02 CL14) | `PAGADO` | La regla 1 no exige igualdad exacta |
 | Pago cubierto cuya fecha ya pasó | `PAGADO`, *pagado con atraso* | La regla 1 se evalúa antes que la 2 |
-| Reajuste retroactivo sube el esperado a 530.000 con 500.000 abonados y fecha vencida (HU02 CL12) | `VENCIDO`, *con abonos parciales*, saldo 30.000 | La regla 2 se evalúa antes que la 3 |
-| El mismo caso con fecha no vencida (HU02 CL13) | `PARCIALMENTE_PAGADO`, saldo 30.000 | La regla 2 no aplica; decide la 3 |
+| Abonos por 500.000 sobre un esperado de 530.000 y fecha vencida | `VENCIDO`, *con abonos parciales*, saldo 30.000 | La regla 2 se evalúa antes que la 3 |
+| El mismo caso con fecha no vencida | `PARCIALMENTE_PAGADO`, saldo 30.000 | La regla 2 no aplica; decide la 3 |
 
 ### 6.2 Ejemplo
 

@@ -213,11 +213,12 @@ deriva estados.
   vigente hoy
 
 **Escenario 5 — Reajuste con vigencia retroactiva**
-- **Dado** un contrato con pagos esperados ya generados para meses transcurridos
+- **Dado** un contrato con pagos esperados ya generados para meses transcurridos, sin abonos
+  en los pagos cuyo monto cambiaría
 - **Cuando** registro un reajuste con fecha de vigencia anterior al mes en curso
-- **Entonces** los pagos esperados de los meses comprendidos desde esa fecha se actualizan
-  al nuevo monto, y el estado de cada uno se recalcula aplicando las reglas generales sobre
-  el monto esperado corregido, los abonos ya registrados y la fecha esperada de pago
+- **Entonces** los pagos esperados afectados desde esa fecha se actualizan al nuevo monto, y
+  el estado de cada uno se deriva aplicando las reglas generales sobre el monto esperado
+  vigente, los abonos registrados y la fecha esperada de pago
 
 **Escenario 6 — Un solo abono cubre el pago**
 - **Dado** un pago esperado de 600.000 CLP sin abonos
@@ -250,20 +251,24 @@ deriva estados.
 - **Entonces** queda **vencido**, y el producto indica explícitamente que se trata de un
   vencido con abonos parciales, con su total recibido y su saldo pendiente
 
-**Caso límite 12 — El reajuste descubre un pago cuya fecha ya venció**
-- **Dado** un pago esperado de 500.000 CLP con un abono de 500.000 CLP, en estado pagado, y
-  cuya fecha esperada ya pasó
-- **Cuando** un reajuste con vigencia retroactiva eleva el monto esperado de ese mes a
-  530.000 CLP
-- **Entonces** el pago queda **vencido**, con la indicación explícita de que tiene abonos
-  parciales por 500.000 CLP y un saldo pendiente de 30.000 CLP — no queda simplemente
-  parcialmente pagado
+**Caso límite 12 — Reajuste que modificaría un pago con abonos**
+- **Dado** un pago esperado de 500.000 CLP con un abono de 500.000 CLP
+- **Cuando** intento un reajuste con vigencia retroactiva que elevaría el monto esperado de
+  ese mes a 530.000 CLP
+- **Entonces** la operación se rechaza (HTTP 422) sin cambios parciales: el monto esperado,
+  el abono y el estado del pago no cambian
 
-**Caso límite 13 — El reajuste descubre un pago que aún no ha vencido**
-- **Dado** un pago esperado de 500.000 CLP con un abono de 500.000 CLP, en estado pagado, y
-  cuya fecha esperada aún no se ha cumplido
-- **Cuando** un reajuste eleva el monto esperado de ese mes a 530.000 CLP
-- **Entonces** el pago queda **parcialmente pagado**, con un saldo pendiente de 30.000 CLP
+**Caso límite 13 — Corrección o eliminación que modificaría un pago con abonos**
+- **Dado** un pago esperado con al menos un abono
+- **Cuando** intento corregir un monto, o eliminar un reajuste, y eso cambiaría el monto
+  esperado de ese pago
+- **Entonces** la operación se rechaza (HTTP 422) sin cambios parciales. Un pago con abonos
+  cuyo monto esperado no cambiaría no bloquea la operación
+
+> **Cambio respecto del diseño original** (`gestion-montos-arriendo`). El Escenario 5 y los
+> casos límite 12 y 13 preveían que un reajuste modificara pagos ya abonados. Hoy se rechaza.
+> Los montos pueden corregirse, incluido el inicial; los reajustes pueden eliminarse, y el
+> monto inicial no.
 
 **Caso límite 14 — Los abonos exceden el monto esperado**
 - **Dado** un pago esperado de 600.000 CLP
@@ -294,15 +299,13 @@ deriva estados.
 - **Entonces** quedan localizables desde el contrato y desde su propiedad
 
 > **Precisión sobre el estado del pago.** `product.md` §6.4 define cuatro estados
-> mutuamente excluyentes. Los casos límite 11, 12 y 13 mantienen **vencido** como estado
-> —el vencimiento prevalece— y añaden la parcialidad como calificación explícita de ese
-> estado, no como un quinto estado.
+> mutuamente excluyentes. El caso límite 11 mantiene **vencido** como estado —el vencimiento
+> prevalece— y añade la parcialidad como calificación explícita de ese estado, no como un
+> quinto estado.
 >
-> La regla es uniforme y no depende de la causa del cambio: el estado se deriva siempre del
-> monto esperado vigente, los abonos registrados y la fecha esperada. Que el monto haya
-> cambiado por un reajuste no introduce un tratamiento distinto — por eso un pago
-> descubierto por un reajuste queda *vencido con abonos parciales* si su fecha ya pasó, y
-> *parcialmente pagado* solo si no ha vencido.
+> La regla es uniforme y no depende de la causa: el estado se deriva siempre del monto
+> esperado vigente, los abonos registrados y la fecha esperada. Un cambio de montos no puede
+> alterar el esperado de un pago que ya tiene abonos (casos límite 12 y 13).
 >
 > Conviene reflejar esta precisión en `product.md` §6.4.
 
@@ -318,10 +321,10 @@ deriva estados.
   abonos asociados.
 - El estado de un pago se determina a partir del monto esperado, los abonos recibidos y la
   fecha esperada de pago: pendiente, parcialmente pagado, pagado o vencido.
-- Si el monto esperado cambia por un reajuste, el estado se recalcula con esas mismas
-  reglas. Un pago cuya fecha esperada ya pasó y cuyos abonos no cubren el monto corregido
-  queda vencido, conservando explícitamente que existen abonos parciales; solo queda
-  parcialmente pagado si la fecha aún no ha vencido.
+- Se puede registrar, corregir y eliminar reajustes; el monto inicial puede corregirse, pero
+  no eliminarse. Toda operación que modificaría el monto esperado de un pago con abonos se
+  rechaza (HTTP 422). El estado se deriva con las mismas reglas sobre el monto esperado
+  vigente.
 - La garantía es información contractual, no un ingreso recurrente del flujo mensual.
 
 ### Fuera de alcance

@@ -2,7 +2,7 @@
 %%
 %% Fuente versionable del diagrama de docs/data-model.md §3 "Diagrama del modelo de datos".
 %% Debe mantenerse consistente con ese documento: si ambos difieren, manda el documento.
-%% Las trece entidades, sus atributos y las catorce relaciones son las que definen
+%% Las quince entidades, sus atributos y las dieciséis relaciones son las que definen
 %% docs/data-model.md §4 (entidades) y §5 (relaciones y cardinalidades).
 %%
 %% Convenciones: la precisión de los NUMERIC va en el comentario de cada atributo
@@ -157,6 +157,29 @@ erDiagram
         timestamptz subido_en "NOT NULL"
     }
 
+    DOCUMENTO_SUBIDA {
+        uuid id PK
+        uuid propiedad_id FK "NOT NULL"
+        tipo_documento tipo "NOT NULL"
+        text nombre_archivo "NOT NULL"
+        text mime_type "NOT NULL"
+        bigint tamano_bytes "NOT NULL - mayor que 0"
+        text clave_temporal UK "NOT NULL"
+        text clave_definitiva UK "NOT NULL"
+        estado_subida estado "NOT NULL"
+        timestamptz expira_en "NOT NULL"
+        timestamptz reclamada_en "NULL"
+        uuid documento_id FK "NULL - UNIQUE"
+        timestamptz creada_en "NOT NULL"
+    }
+
+    LOGIN_INTENTO {
+        text clave PK "HMAC de cuenta o IP"
+        integer contador "NOT NULL"
+        timestamptz ventana_inicio "NOT NULL"
+        timestamptz actualizado_en "NOT NULL"
+    }
+
     PROPIEDAD ||--o| CREDITO_HIPOTECARIO : "tiene como maximo uno"
     CREDITO_HIPOTECARIO ||--o{ CREDITO_REGISTRO_MENSUAL : "registra mes a mes"
     PROPIEDAD ||--o{ CONTRATO_ARRIENDO : "arrienda mediante"
@@ -171,7 +194,10 @@ erDiagram
     CONTRATO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
     ABONO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
     MOVIMIENTO_FINANCIERO ||--o{ DOCUMENTO : "respaldado por"
+    PROPIEDAD ||--o{ DOCUMENTO_SUBIDA : "reserva"
+    DOCUMENTO |o--o| DOCUMENTO_SUBIDA : "se completa desde"
 
+%% LOGIN_INTENTO tampoco tiene relaciones (contador de intentos de acceso).
 %% USUARIO y VALOR_UF_PERIODO no tienen relaciones: el primero solo guarda credenciales
 %% —el MVP es de usuario único, así que ninguna entidad de dominio lleva usuario_id— y el
 %% segundo es una tabla de referencia que se consulta por período.

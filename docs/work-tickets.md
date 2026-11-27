@@ -8,7 +8,9 @@ la implementación.
 
 > **Estado.** El backlog es la fuente del trabajo; el estado real de cada ticket está en su
 > bloque «Estado de implementación». T01–T07, T09–T12 están implementados (T08 cancelado);
-> el despliegue en Vercel/Neon sigue siendo propuesta. Lo que un ticket describe sin bloque de
+> la aplicación está desplegada en
+> <https://realtytrack.vercel.app> (Vercel, Neon y Cloudflare R2). Las notas de verificación de
+> cada ticket describen el momento de su cierre. Lo que un ticket describe sin bloque de
 > estado es diseño.
 
 **Relación con `readme.md` §6.** La plantilla oficial exige documentar allí 3 tickets
@@ -306,8 +308,12 @@ modifica al editar el contrato.
   - Si el contrato **no tiene ninguna fila** (creado en T04 sin monto), el alta registra el
     **primer monto**, con `vigente_desde_periodo` igual al mes de `fecha_inicio`
     (`data-model.md` §5.1, regla 4).
-  - Los reajustes posteriores **agregan filas nuevas**; nunca sobrescriben ni eliminan filas
-    anteriores del histórico.
+  - Los reajustes posteriores **agregan filas nuevas**; el alta no sobrescribe ni elimina
+    filas anteriores del histórico.
+- Corrección de un monto (incluido el inicial) y eliminación de un reajuste (nunca el monto
+  inicial), añadidas con `gestion-montos-arriendo`.
+- Rechazo (422), sin cambios parciales, de toda alta, corrección o eliminación que modificaría
+  el monto esperado de un pago con abonos.
 - Generación de `pago_esperado` para los períodos del contrato vigente, con el monto y la
   fecha esperada correspondientes.
 - Recálculo explícito de `monto_esperado_clp` en los `pago_esperado` afectados por un
@@ -318,7 +324,7 @@ modifica al editar el contrato.
 |---|---|---|
 | AC1 | E3 — Reajuste sin crear un contrato nuevo | El contrato conserva identidad, arrendatario y garantía; el monto vigente cambia desde el mes del reajuste |
 | AC2 | E4 — Un mes anterior conserva el monto que regía | El pago esperado de un mes anterior a un reajuste refleja el monto de entonces, no el vigente hoy |
-| AC3 | E5 — Reajuste con vigencia retroactiva | Los pagos esperados de los meses comprendidos se actualizan al nuevo monto y su estado se recalcula |
+| AC3 | E5 — Reajuste con vigencia retroactiva | Los pagos esperados afectados, sin abonos, se actualizan al nuevo monto y su estado se deriva con él; si cambiaría un pago con abonos, 422 |
 | AC4 | CL15 — Mes sin contrato vigente | Sin contrato vigente no existe pago esperado, y su ausencia no es impago |
 
 **Entidades involucradas:** `contrato_monto`, `pago_esperado` (`data-model.md` §4.7, §4.8).
@@ -350,10 +356,12 @@ prorrateo intramensual de un reajuste (fuera de alcance por decisión de modelo,
   traducen directamente a tablas de casos.
 
 **Estado de implementación (T05, cambio OpenSpec `implement-rent-adjustments`).**
+*Evidencia histórica del cierre de ese cambio; la ampliación posterior, más abajo, añadió la
+corrección, la eliminación y el rechazo por abonos.*
 Implementado y verificado con `npm test` (144 pruebas, 0 fallidas), TypeScript y lint sin
 errores, y revisión manual de la interfaz.
 - *Primer monto y reajustes:* `POST /api/propiedades/{id}/contratos/{contratoId}/montos`
-  agrega una fila a `contrato_monto`; nunca modifica ni elimina las anteriores. Sin filas,
+  agrega una fila a `contrato_monto`; este `POST` no modifica ni elimina las anteriores. Sin filas,
   el primer monto rige desde el mes de `fecha_inicio`. Período fuera de la vigencia del
   contrato (anterior al inicio o posterior al término) → 422; período repetido → 409.
   `GET` del mismo path devuelve el historial y el monto vigente (solo lectura).
@@ -377,16 +385,13 @@ errores, y revisión manual de la interfaz.
 - *Alcance:* el AC3 se cumple en lo que T05 posee, el **monto esperado**. El **estado** del
   pago no se calcula ni se persiste: es derivado y depende de los abonos (T06).
 
-**Comportamiento previsto de los reajustes cuando T06 registre abonos** (diseñado, no
-implementado): el reajuste solo cambia `monto_esperado_clp`; nunca modifica, elimina ni
-reasigna abonos. *Actualización (`gestion-montos-arriendo`):* un reajuste que cambiaría el esperado
-de un pago con abonos se rechaza (422), ver el estado de T05 más abajo; las reglas de estado
-siguientes siguen valiendo para la derivación. El estado se deriva al consultar
-(`data-model.md` §6.1): un pago pagado cuyo esperado sube pasa a *vencido con abonos
-parciales* si su fecha esperada ya pasó (CL12) o a *parcialmente pagado* si no (CL13); si el
-esperado baja, los abonos excedentes se admiten (CL14). T05 no persiste estado, saldo ni
-exceso. Fuera de T05 quedan los abonos y pagos recibidos (T06) y los movimientos financieros
-(T07).
+**Reajustes y abonos (regla vigente).** Un cambio de montos solo modifica
+`monto_esperado_clp`; nunca modifica, elimina ni reasigna abonos, y se rechaza (422) si
+cambiaría el esperado de un pago con abonos. *Nota histórica:* el diseño original de T05
+preveía que un reajuste cambiara pagos abonados (CL12–CL14);
+`gestion-montos-arriendo` lo reemplazó. El estado se sigue derivando al consultar
+(`data-model.md` §6.1). T05 no persiste estado, saldo ni exceso. Fuera de T05 quedan los abonos
+y pagos recibidos (T06) y los movimientos financieros (T07).
 
 ---
 
@@ -425,7 +430,7 @@ abonos y la fecha esperada (`data-model.md` §6.1); *vencido con abonos parciale
 | AC1 | E6/E7 — Uno o varios abonos cubren el pago | Un abono o la suma de varios que alcanza el esperado deja el pago en `PAGADO` |
 | AC2 | E8/E9/E10 — Pendiente, parcial y vencido | Sin abonos y sin vencer → `PENDIENTE`; parcial sin vencer → `PARCIALMENTE_PAGADO`; sin abonos y vencido → `VENCIDO` |
 | AC3 | CL11 — Vencido con abonos parciales | Un pago con abonos parciales cuya fecha ya pasó queda `VENCIDO`, indicando su total recibido y su saldo pendiente |
-| AC4 | CL12/CL13 — El reajuste descubre un pago | Un reajuste retroactivo que eleva el monto esperado deja el pago `VENCIDO` con parciales si su fecha ya pasó, o `PARCIALMENTE_PAGADO` si no ha vencido — misma precedencia, sin tratamiento especial |
+| AC4 | CL12/CL13 — Cambio de montos sobre un pago con abonos | Se rechaza (422) y el monto esperado, los abonos y el estado no cambian; la precedencia de derivación no varía y se aplica siempre al monto esperado vigente |
 | AC5 | CL14 — Los abonos exceden el monto esperado | Abonos que superan el esperado dejan el monto cubierto y el pago `PAGADO` |
 
 **Entidades involucradas:** `abono_arriendo` (`data-model.md` §4.9); lee `pago_esperado`
@@ -439,7 +444,7 @@ abonos y la fecha esperada (`data-model.md` §6.1); *vencido con abonos parciale
 - Persistencia: `abono_arriendo` sin restricción de tope sobre el monto.
 
 **Dependencias:** T05 (`pago_esperado_id`). Ante un reajuste, T06 solo deriva el estado
-sobre el `monto_esperado_clp` ya actualizado por T05 (ver «Comportamiento previsto» en T05).
+sobre el `monto_esperado_clp` vigente (ver «Reajustes y abonos» en T05).
 
 **Fuera de alcance:** cobrar o ejecutar el pago (`product.md` §8); consolidación del
 ingreso dentro del flujo del mes (T09); comprobante del abono como documento (T11, no

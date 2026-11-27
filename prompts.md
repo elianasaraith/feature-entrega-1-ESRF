@@ -20,13 +20,20 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 | Herramienta | Uso en RealtyTrack |
 |---|---|
-| Claude Code (extensión de VS Code) | Asistente de código en todas las fases: documentación de la Entrega 1 y desarrollo de T01–T07, T09, T10 y T12, más la ampliación de T07 con desglose de conceptos; T08 se exploró, se implementó localmente y se canceló |
-| OpenSpec | Flujo Spec-Driven Development: `openspec/specs/` (9 capacidades) y `openspec/changes/archive/` (12 cambios archivados: fundación, autenticación, propiedades, créditos, registro mensual, contratos, reajustes, abonos de arriendo, movimientos financieros, dashboard financiero, la retirada de T08 del dashboard y el desglose de conceptos de T07). El cambio `t07-desglose-movimientos` quedó verificado y archivado como `2026-11-18-t07-desglose-movimientos`. El cambio `t10-integracion-uf` está implementado y verificado, pero **no archivado** |
+| Claude Code (extensión de VS Code) | Asistente de código en todas las fases: documentación, desarrollo de T01–T07 y T09–T12 (T08 se exploró, se implementó localmente y se canceló), ampliaciones, rediseño, seguridad, E2E, seed de demostración y cierre documental |
+| OpenSpec | Flujo Spec-Driven Development: 14 especificaciones en `openspec/specs/`, 22 cambios archivados en `openspec/changes/archive/` y ninguno activo. En el cierre, `openspec validate --all --strict` dio 14 de 14 |
+| Playwright (Chromium) | Cinco escenarios E2E (`e2e/`); ejecutados con éxito en local por la persona, en dos ejecuciones consecutivas con 5 de 5 en ambas |
+| Vercel, Neon y Cloudflare R2 | Despliegue de producción, PostgreSQL y documentos de la demo. La persona confirma el despliegue, las migraciones, el seed y las pruebas en producción; en la sesión de cierre la IA no accedió a Neon ni a R2 |
 | Comandos y skills del repositorio | `.claude/commands/opsx/` (explore, propose, apply, verify, archive…) y `.claude/skills/` (skills `openspec-*`) |
 
-**Modelos.** Claude, a través de Claude Code. En la sesión de T05 y en la sesión que cubre T08 y la ampliación de T07 (desglose) el modelo
-y en la sesión de T10 el modelo fue **Claude Sonnet 5.5**, según lo informa Claude Code; el modelo de las demás sesiones no quedó
-registrado en el repositorio y no se afirma aquí.
+**Modelos.** Claude, a través de Claude Code. En las sesiones de T05, de T08 y la ampliación de
+T07 (desglose), de T10 y de auditoría y cierre documental final, el modelo fue **Claude Sonnet
+5.5**, según lo informa Claude Code. El modelo de las demás sesiones no quedó registrado en el
+repositorio y no se afirma aquí.
+
+**Subagentes.** Revisor documental (consistencia de la API, §4); revisión de seguridad
+independiente y de solo lectura (§2.5); tres subagentes por módulos en el rediseño (solo uno
+completó su trabajo, §6); y un subagente de solo lectura para la auditoría final de entrega (W9).
 
 **Contexto avanzado (respaldado por el repositorio).**
 
@@ -43,19 +50,20 @@ registrado en el repositorio y no se afirma aquí.
 
 ## Workflows representativos
 
-Ocho workflows concentran el uso de IA; el detalle de los prompts está en las secciones
+Nueve workflows concentran el uso de IA; el detalle de los prompts está en las secciones
 indicadas.
 
 | # | Workflow | Qué demuestra | Dónde |
 |---|---|---|---|
 | W1 | Documentación spec-first (Entrega 1): producto → historias → modelo → arquitectura → tickets → README | IA para diseñar y documentar antes de programar, con correcciones de las propuestas | Secciones 1–6 |
-| W2 | Autenticación y propiedades (T12, T01) con OpenSpec | Restricciones de seguridad y de pruebas dadas a la IA antes de implementar | Sección 6, «T01 — precisiones…» |
-| W3 | Créditos y registro mensual (T02, T03) | Aislamiento de la base de pruebas comprobado por componentes, no por texto | Sección 6, «T03 — ajustes… / refuerzo…» |
-| W4 | Contratos (T04) | Migraciones escritas por la IA y aplicadas solo con verificación y autorización | Sección 6, «T04 — gestión de contratos…» |
-| W5 | Montos, reajustes y pagos esperados (T05): explore → plan → propose → apply → verify → archive | Ciclo completo con el plan corregido por la persona, validación manual y archivo | Sección 6, «T05 — montos…» y abajo |
-| W6 | Cancelación y retirada de T08 (aportes de capital) | Una decisión de producto aplicada sin perder el historial: se retiró solo el código de T08, se conservó la migración histórica, la persona aplicó la migración de retiro y el change no se archivó como implementado | Sección 6, «T08 — …» |
-| W7 | Ampliación de T07 con desglose de conceptos: explore → propose → corrección del `PUT` → apply por etapas → verify | Diseño corregido antes de implementar por una precondición de la persona; seis etapas con detención al final de cada una, migración aplicada por la persona y verificación sin marcar como ejecutado lo que no corrió | Sección 6, «T07 — ampliación…» |
-| W8 | Integración de la UF (T10): explore → propose → ajustes de la persona → apply por grupos con detención y verificación local entre cada uno | Alcance acotado por etapas; una exploración que fundó decisiones de producto aprobadas por la persona; la IA no marcó como verificado lo que su sandbox no pudo ejecutar (PostgreSQL, findic.cl, navegador) | Sección 6, «T10 — integración de la UF…» |
+| W2 | Autenticación y propiedades (T12, T01) con OpenSpec | Restricciones de seguridad y de pruebas dadas a la IA antes de implementar | Sección 6, registro de implementación |
+| W3 | Créditos y registro mensual (T02, T03) | Aislamiento de la base de pruebas comprobado por componentes, no por texto | Sección 6, registro de implementación |
+| W4 | Contratos (T04) | Migraciones escritas por la IA y aplicadas solo con verificación y autorización | Sección 6, registro de implementación |
+| W5 | Montos, reajustes y pagos esperados (T05): explore → plan → propose → apply → verify → archive | Ciclo completo con el plan corregido por la persona, validación manual y archivo | Sección 6, registro de implementación, y abajo |
+| W6 | Cancelación y retirada de T08 (aportes de capital) | Una decisión de producto aplicada sin perder el historial: se retiró solo el código de T08, se conservó la migración histórica, la persona aplicó la migración de retiro y el change no se archivó como implementado | Sección 6, decisiones de T08 |
+| W7 | Ampliación de T07 con desglose de conceptos: explore → propose → corrección del `PUT` → apply por etapas → verify | Diseño corregido antes de implementar por una precondición de la persona; seis etapas con detención al final de cada una, migración aplicada por la persona y verificación sin marcar como ejecutado lo que no corrió | Sección 6, decisiones del desglose |
+| W8 | Integración de la UF (T10): explore → propose → ajustes de la persona → apply por grupos con detención y verificación local entre cada uno | Alcance acotado por etapas; una exploración que fundó decisiones de producto aprobadas por la persona; la IA no marcó como verificado lo que su sandbox no pudo ejecutar (PostgreSQL, findic.cl, navegador) | Sección 6, decisiones de T10 |
+| W9 | Auditoría y cierre documental final: auditoría de solo lectura con un subagente → plan mínimo → aprobación con restricciones → ajustes, archivado y validación estricta | La IA no implementa hasta la aprobación y documenta solo resultados confirmados | Abajo |
 
 **W5 en detalle (hechos del desarrollo de T05).** Se pidió explorar T05 sin modificar
 archivos; la IA presentó un plan, la persona **lo rechazó con seis ajustes** (interfaz
@@ -64,6 +72,31 @@ explícita en lugar de escrituras silenciosas desde un `GET`, alcance mínimo, d
 comportamiento futuro con abonos y verificar la migración) y la IA lo reescribió antes de
 generar los artefactos OpenSpec. Después se implementó, se verificó contra los artefactos
 (`/opsx:verify`), se validó manualmente en la interfaz y se archivó (`/opsx:archive`).
+
+**Etapas finales (resumen respaldado por el repositorio y por lo confirmado por la persona; no
+son citas).**
+
+| Etapa | Qué se hizo | Evidencia |
+|---|---|---|
+| Seguridad (`seguridad-mvp`) | Auditoría con subagente y endurecimiento; prompts en la sección 2.5 | Change archivado; commit `ab2aa34`; `docs/architecture.md` §11 |
+| Pruebas E2E (`pruebas-e2e-mvp`) | Flujo principal ampliado a cinco escenarios y corregido tras la primera ejecución local; la persona confirmó que los cinco finalizaron correctamente; change archivado en el cierre | `e2e/`; commit `ab2aa34`; spec `e2e-testing` |
+| Seed de demostración | Datos ficticios, repetible, con guarda del host de destino; la persona lo ejecutó (3 propiedades, 6 meses, 17 abonos) | `prisma/seed-demo.ts`; commit `60b4fb8` |
+| Despliegue | Vercel, Neon (17 migraciones aplicadas) y un bucket R2 de demo; la persona validó en producción la carga de documentos y la edición de registros | <https://realtytrack.vercel.app>; confirmación de la persona |
+
+**W9 — prompts de la auditoría y del cierre (fragmentos literales).**
+
+> «Realiza una auditoría final de RealtyTrack orientada al cumplimiento de los requisitos de entrega del máster AI4Devs.» · «Utiliza un subagente de revisión documental de solo lectura para reducir el consumo de contexto.» · «No inventes evidencias, modelos utilizados ni resultados de pruebas.» · «Espera mi aprobación antes de implementar cualquier ajuste.»
+>
+> «Documenta exclusivamente los resultados reales proporcionados.» · «No marques retroactivamente tareas de cambios ya archivados sin evidencia suficiente.»
+
+*Resultado:* el enunciado oficial del máster no está en el repositorio, por lo que la auditoría
+se apoyó en la plantilla de `readme.md` y `prompts.md`. En el cierre definitivo, la persona
+confirmó que sus pruebas locales finalizaron satisfactoriamente y pidió documentar solo lo
+respaldado por evidencia: «No inventes cifras ni resultados. No vuelvas a ejecutar las pruebas».
+La IA contrastó el reporte de Playwright y los códigos de salida de los registros locales de npm,
+sin volver a ejecutar nada (`readme.md` §2.6). La persona confirmó después que pasaron todas las pruebas
+de `npm test`, que ambas ejecuciones E2E dieron 5 de 5 y que el build compiló; no se dispone del conteo
+exacto de pruebas unitarias y de integración.
 
 ## Decisiones humanas relevantes
 
@@ -82,7 +115,9 @@ generar los artefactos OpenSpec. Después se implementó, se verificó contra lo
 | **Recorte de infraestructura sin consumidores**: la persona pidió no implementar `UfNoDisponibleError` ni el 503; el criterio AC4 quedó documentado, no implementado | Prompt de ajuste de T10; `docs/architecture.md` §12.4 |
 | **Control de latencia con el proveedor caído**: la persona fijó el máximo de 6 llamadas simultáneas y aprobó, con reglas explícitas, un corte anticipado tras 6 fallos consecutivos (la serie vacía no cuenta como fallo) | Prompts de los grupos 6 de T10; `docs/architecture.md` §12.3 |
 | **Seguridad previa al despliegue público**: la persona exigió no dar por resuelta la integridad de la promoción de objetos en R2 sin garantía demostrable, no usar un audit filtrado como evidencia de ausencia de vulnerabilidades, no aplicar migraciones y separar lo comprobado de lo pendiente por limitaciones del sandbox | Prompt 3 de la sección 2.5; `docs/architecture.md` §11.3–11.5 y §13.2 |
-| **Prueba E2E del flujo principal (cierre de la entrega final)**: la persona acotó el flujo (login, propiedad, contrato, pago, dashboard, cierre de sesión), exigió PostgreSQL real, base de pruebas aislada, tolerancia al límite de intentos de login, selectores accesibles, sin esperas artificiales y solo la dependencia `@playwright/test`; se archivó `seguridad-mvp` antes; tras pasar las dos primeras pruebas, la persona amplió a cinco escenarios (hipoteca, finanzas, arriendos) exigiendo independencia, fechas deterministas, sin API de UF ni R2 y sin archivar hasta confirmar su ejecución local | Change `pruebas-e2e-mvp`; `e2e/`; `readme.md` 2.6 |
+| **Prueba E2E (entrega final)**: la persona acotó el flujo (login, propiedad, contrato, pago, dashboard, cierre de sesión), exigió PostgreSQL real, base de pruebas aislada, tolerancia al límite de intentos de login, selectores accesibles, sin esperas artificiales y solo la dependencia `@playwright/test`; se archivó `seguridad-mvp` antes; tras pasar las dos primeras pruebas, la persona amplió a cinco escenarios (hipoteca, finanzas, arriendos) exigiendo independencia, fechas deterministas, sin API de UF ni R2 y sin archivar hasta confirmar su ejecución local (confirmada después) | Change `pruebas-e2e-mvp`; `e2e/`; `readme.md` 2.6 |
+| **Despliegue y cierre**: la persona desplegó, aplicó las migraciones, ejecutó el seed, probó en producción, decidió entregar las credenciales por separado, documentar el PR #1 sin crear otro, conservar el vídeo como evidencia de la entrega anterior y dejar las mejoras opcionales fuera del alcance | W9; `readme.md` 0.4 y 7 |
+| **Cambio posterior sobre las credenciales de demostración**: la decisión anterior de entregarlas por separado se modificó después para facilitar la evaluación académica; la persona decidió publicar solo las del usuario de demostración en `readme.md` §0.4 e incorporarlas manualmente. Los secretos de infraestructura y las credenciales privadas siguen sin versionarse | Decisión de la persona en el cierre documental; `readme.md` 0.4 |
 | **Veracidad de la verificación de T10**: la persona exigió no afirmar ejecuciones sin evidencia del contador `skipped`, no asumir que una fecha futura carece de UF sin comprobar la respuesta real del proveedor, y registrar como salvedad que el crédito sin `fechaOtorgamiento` no se comprobó visualmente | Prompts de los grupos 7 a 9 de T10; `docs/work-tickets.md` §4.10 |
 
 ---
@@ -210,7 +245,7 @@ generar los artefactos OpenSpec. Después se implementó, se verificó contra lo
 
 ### **2.4. Infraestructura y despliegue**
 
-*Sin prompt distintivo propio para esta fase: quedó cubierta por el prompt inicial de 2.2, sin una corrección puntual separada.*
+*Sin prompt distintivo propio para esta fase: quedó cubierta por el prompt inicial de 2.2, sin una corrección puntual separada.* *El despliegue real (Vercel, Neon y Cloudflare R2) lo ejecutó y verificó la persona; se resume en «Etapas finales» y no se conservan prompts literales de él.*
 
 ### **2.5. Seguridad**
 
@@ -433,12 +468,6 @@ generar los artefactos OpenSpec. Después se implementó, se verificó contra lo
 
 *Implementación posterior, con OpenSpec, de T01 (Gestión de propiedades) y T03 (Registro mensual de dividendo y saldo del crédito, cuya capa de base de datos ilustra el «Ticket 3» del README): fragmentos de los mensajes que aprobaron cada plan y fijaron sus precisiones. Los criterios de T03 se verificaron con pruebas unitarias, pruebas de integración contra una BD de pruebas aislada y una verificación manual en la interfaz.*
 
-*Registro complementario de la fase de implementación (W2–W7 de «Workflows
-representativos»). No cuenta como prompts principales adicionales de esta sección: agrupa
-los mensajes de apply de T01 a T09, de la retirada de T08 y de la ampliación de T07 con las
-restricciones que se dieron a la IA. En las dos últimas entradas, las frases entre comillas
-son fragmentos literales de los mensajes de la sesión; lo demás es un resumen del recorrido.*
-
 **T01 — precisiones de autenticación, pruebas de integración y validaciones:**
 
 > 1. Autenticación: las rutas /api/* sin sesión deben responder 401 JSON. Las páginas protegidas deben seguir redirigiendo a /login. No alterar /api/auth/*. Mantener requireSession() en los Route Handlers.
@@ -467,72 +496,32 @@ son fragmentos literales de los mensajes de la sesión; lo demás es un resumen 
 
 > Compara las conexiones mediante sus componentes: host, puerto, nombre de base de datos y schema de PostgreSQL. No utilices las contraseñas para determinar si dos conexiones apuntan a la misma base. Si una URL es inválida o no se puede comprobar el aislamiento, omite las pruebas de integración. Mantén la posibilidad de utilizar el mismo usuario PostgreSQL para dos bases diferentes.
 
-**T04 — gestión de contratos de arriendo (apply de `implement-lease-management`):**
+*Registro de implementación (condensado; no son prompts principales adicionales). Resume las
+restricciones que la persona dio a la IA en el apply de cada ticket.*
 
-> Implementa el cambio OpenSpec implement-lease-management siguiendo los artefactos aprobados. Mantén el modelo de usuario único (sin usuario_id) y exige sesión y existencia del arrendatario. Rechaza con 409 los cambios de mes de fechaInicio cuando el contrato ya tenga monto inicial. Mantén pg_advisory_xact_lock para las operaciones concurrentes. No implementes T05 ni T06. Puedes generar los archivos de migración, pero antes de aplicar cualquiera verifica y muestra host, puerto y nombre de la base de destino sin credenciales; aplícala solo a realtytrack_test y nunca a realtytrack ni a producción sin mi autorización. No modifiques .env ni hagas commit ni push.
+| Etapa | Restricciones y decisiones de la persona |
+|---|---|
+| T04 | Usuario único; `pg_advisory_xact_lock`; no adelantar T05/T06; migración solo en `realtytrack_test` sin autorización adicional; sin tocar `.env`, sin commit ni push |
+| T05 | 422 mediante `UnprocessableError`; un reajuste actualiza solo desde su período y no crea pagos; sincronización explícita e idempotente, sin escrituras desde un `GET`; interfaz obligatoria |
+| T06 | Monto no positivo o fecha futura → 422; estado, saldo y completitud derivados, nunca persistidos; abonos conservados ante reajustes |
+| T07 | Siete categorías sin `DIVIDENDO`; CLP enteros; agregación pura reutilizable; verificar que no se duplican dividendos; sin operaciones destructivas |
+| T09 | Un único servicio; totales por fecha de caja; sin tablas, migraciones ni cachés; no declarar verificado si faltan pruebas o revisión manual |
 
-**T05 — montos de arriendo, reajustes y pagos esperados (apply de `implement-rent-adjustments`):**
+> «Implementa completamente el change OpenSpec `t09-dashboard-financiero`» […] «si PostgreSQL no es accesible identifica las pruebas pendientes sin marcarlas como aprobadas» *(fragmentos representativos).*
 
-> Implementa T05 siguiendo los artefactos aprobados de OpenSpec. Agrega UnprocessableError para HTTP 422; el PUT de contratos responde 409 únicamente cuando acortar fechaTermino deja fuera de vigencia montos registrados o pagos esperados existentes, sin bloquear modificaciones válidas. Un reajuste actualiza solo los montos esperados desde su período (y updated_at solo si el monto cambia) y no crea pagos; los pagos se generan con una sincronización explícita e idempotente, sin cron ni escrituras desde un GET, solo si existe un monto registrado. Mantén la interfaz obligatoria para registrar montos, reajustes y sincronizar. No implementes abonos, pagos recibidos ni movimientos financieros (T06 y T07). Reutiliza los servicios y el bloqueo por propiedad existentes, sin dependencias ni abstracciones nuevas. Antes de aplicar cualquier migración pide mi autorización; solo realtytrack_test primero. No modifiques .env ni hagas commit ni push.
+**T08 — aportes de capital (changes `t08-aportes-capital` y `retirar-aportes-dashboard`).** La
+persona aprobó el diseño, aplicó la migración y después **canceló** el ticket por decisión de
+producto. La IA retiró solo su código y pruebas, conservó la migración histórica, generó la de
+retiro (aplicada por la persona) y no archivó el change como implementado; un change mínimo
+renombró «Flujo neto antes de aportes» a «Flujo neto» sin tocar fórmulas.
 
-**T06 — abonos de arriendo y estado derivado (apply de `implement-rent-payments`):**
+> «Vamos a retirar definitivamente T08: Aportes de capital del MVP RealtyTrack.» · «T09 debe conservar sus cálculos actuales.» · «No utilizar git clean ni restauraciones masivas.»
 
-> Implementa completamente el cambio OpenSpec implement-rent-payments: CRUD de abonos con endpoints anidados bajo propiedad, contrato y pago esperado; monto <= 0 y fecha futura responden 422; el estado, el saldo, la fecha de completitud y las calificaciones se recalculan siempre desde los abonos y nunca se persisten; borrado físico con confirmación en la UI; los abonos se conservan ante reajustes de T05. Aplica y verifica las migraciones primero en la base de pruebas aislada y después en la de desarrollo, comprobando el destino antes de cada operación. No hagas commit ni push ni operaciones destructivas; si aparece una decisión bloqueante, detente y consúltame.
-
-**T07 — movimientos financieros (apply de `t07-movimientos-financieros`):**
-
-> Implementa completamente el cambio OpenSpec `t07-movimientos-financieros`: CRUD de egresos con las 7 categorías del ENUM, sin DIVIDENDO ni campo tipo; montos enteros positivos en CLP y fechas YYYY-MM-DD con validación de fechas futuras mediante hoyChile(); agregación mensual pura reutilizable por T09, donde el resumen sin mes cubre el historial completo y con mes solo ese período; interfaz con filtro mensual, total, desglose y eliminación con confirmación; pertenencia a la propiedad y autenticación en todas las operaciones; verificar que no se duplican los dividendos de T03. Antes de aplicar migraciones verifica los destinos de DATABASE_URL, DIRECT_URL y TEST_DATABASE_URL sin exponer credenciales; aplica primero en realtytrack_test y después en realtytrack. Si el sandbox impide acceder a .env o PostgreSQL, detente solo en las tareas dependientes de la base. Sin migrate reset ni operaciones destructivas, sin commit ni push.
-
-**T09 — dashboard financiero (apply de `t09-dashboard-financiero`):**
-
-> Implementa completamente el change OpenSpec `t09-dashboard-financiero`: dashboard de cartera en `/dashboard` y resumen mensual en `/propiedades/[id]` (datos, resumen del mes, actividad reciente con abonos, dividendos y movimientos en orden descendente, accesos), con un único `dashboard-service`, `GET /api/dashboard` y `GET /api/propiedades/[id]/resumen-mensual`. Totales por fecha de caja, estados de pago con `calcularEstadoPago`, saldo UF hasta el mes consultado, BigInt/Decimal sin `Number`, sin aportes (T08) ni conversión UF→CLP (T10), sin tablas, migraciones ni cachés. Aplica `router.refresh()` o `revalidatePath` solo si se demuestra necesario. Ejecuta TypeScript, lint, pruebas y build si el entorno lo permite; si PostgreSQL no es accesible identifica las pruebas pendientes sin marcarlas como aprobadas. Sin commit ni push, sin operaciones destructivas, y no declares T09 verificado si faltan pruebas o revisión manual.
-
-
-**T08 — aportes de capital: exploración, implementación local y cancelación (changes `t08-aportes-capital` y `retirar-aportes-dashboard`):**
-
-*Resumen del recorrido.* Se pidió explorar T08 sin modificar archivos. La persona aprobó el
-diagnóstico con doce decisiones (CRUD de aportes por propiedad, vínculo opcional y solo de
-trazabilidad con un movimiento de T07, `ON DELETE SET NULL`, aporte mensual y acumulado por
-fecha de caja, integración mínima con el dashboard) y se generó el change `t08-aportes-capital`
-(validado en modo estricto). Se aplicó por etapas: modelo Prisma y migración
-`20261114120000_add_aporte_capital` (aplicada por la persona en sus bases locales), dominio y
-servicio, API y pantalla CRUD. T08 nunca se commiteó ni se archivó. Antes de integrarlo, la
-persona lo canceló por decisión de producto; la IA retiró solo su código y sus pruebas,
-conservó la migración histórica y generó la de retiro `20261115120000_drop_aporte_capital`
-(aplicada en PostgreSQL local según declaró la persona), borró el change sin archivarlo como
-implementado y actualizó `CLAUDE.md`, `docs/`, diagramas y `readme.md`. Un change mínimo
-(`retirar-aportes-dashboard`) renombró «Flujo neto antes de aportes» a «Flujo neto» en el spec
-y en la interfaz sin tocar fórmulas, DTO ni contratos; se verificó y se archivó.
-
-> «Necesito una exploración de solo lectura, breve y enfocada, antes de crear el change OpenSpec.»
->
-> «No ejecutes migraciones contra bases de datos. Genera la migración y detente para que yo la revise y aplique desde mi terminal.»
->
-> «Vamos a retirar definitivamente T08: Aportes de capital del MVP RealtyTrack.»
->
-> «No necesitamos registrar aportes de capital independientes.» · «T09 debe conservar sus cálculos actuales.» · «Más adelante evaluaremos un desglose opcional de conceptos dentro de T07, pero NO lo implementaremos ahora.»
->
-> «Conservar la migración histórica add_aporte_capital y generar una nueva migración de retiro.» · «No utilizar git clean ni restauraciones masivas.» · «Retirar el change activo t08-aportes-capital sin archivarlo como implementado.»
-
-**T07 — ampliación con desglose de conceptos (change `t07-desglose-movimientos`):**
-
-*Resumen del recorrido.* Exploración de solo lectura (modelo Prisma, servicio, esquemas, rutas,
-interfaz y pruebas de T07, y cómo T09 agrega los gastos), con una propuesta de entidad hija
-y la comparación entre guardar el total o calcularlo. La persona aprobó doce decisiones
-técnicas y se generó el change (proposal, design, specs y tasks, validado en modo estricto).
-Antes de implementar, la persona pidió comprobar que el `PUT` protegiera los conceptos cuando
-el campo se omite; la IA reportó que el diseño aprobado lo hacía al revés (omitirlo convertía
-el gasto en simple y borraba el desglose), presentó dos opciones y la persona confirmó la
-**opción A** con cinco reglas, tras lo cual se actualizaron y revalidaron los artefactos. El
-apply se hizo en seis etapas, deteniéndose al final de cada una a la espera de autorización:
-Prisma y migración `20261116120000_add_movimiento_concepto` (la IA la generó sin conexión y se
-detuvo; la persona la aplicó en `realtytrack` y `realtytrack_test`), dominio, esquemas Zod y
-servicio, API con pruebas HTTP, interfaz, pruebas de integración con T09 y documentación. La
-persona ejecutó localmente las pruebas de integración y de T09, la suite completa y el build,
-y la consulta de integridad en `realtytrack_test`; la sandbox de la IA no alcanzaba PostgreSQL
-y la IA no marcó como ejecutado lo que no pudo correr. La verificación visual es **parcial**:
-solo se confirmó la conversión de un gasto simple en uno desglosado con tres conceptos y total
-de 150.000 CLP.
+**T07 — ampliación con desglose de conceptos (change `t07-desglose-movimientos`).** Exploración,
+diseño y apply en seis etapas con detención. La persona detectó que el diseño aprobado borraba el
+desglose al omitir `conceptos` en el `PUT` y confirmó la **opción A**: ausente conserva, `[]`
+convierte en simple, `null` da 400 y una lista reemplaza el desglose. La persona aplicó la
+migración y ejecutó las pruebas; la revisión visual consta como parcial.
 
 > «Un movimiento financiero puede ser simple o desglosado.» · «Los conceptos no son movimientos independientes.» · «El dashboard contabiliza una sola vez el total del movimiento.»
 >
@@ -545,13 +534,6 @@ de 150.000 CLP.
 > «IMPORTANTE: Implementa únicamente la ETAPA 1 (modelo Prisma y migración). Detente al terminarla y espera mi aprobación.» · «No ejecutar prisma migrate dev ni migrate deploy.»
 >
 > «No marcar pruebas visuales como ejecutadas si no pudiste abrir la aplicación.» · «No marcar como ejecutadas pruebas que no hayan podido correr.»
-
-*Reglas del `PUT` de la opción A (resumen, no cita textual):* sin `conceptos`, un gasto simple
-se edita como siempre y un desglosado conserva sus conceptos y su total (acepta `montoClp`
-omitido o igual al total; uno distinto da 422 sin modificar nada); `conceptos: []` lo convierte
-explícitamente en simple, exige un monto positivo y elimina los conceptos de forma atómica;
-`conceptos: null` da 400; una lista de conceptos reemplaza el desglose completo y el total se
-recalcula en el servidor.
 
 *Decisiones técnicas registradas* (el detalle vive en `docs/data-model.md` §4.14, D15 y D16, y
 en el change `t07-desglose-movimientos`):
@@ -567,28 +549,11 @@ en el change `t07-desglose-movimientos`):
 | Verificación: pruebas ejecutadas localmente por la persona; revisión visual parcial | Declarado por la persona | `docs/work-tickets.md` §4.7 |
 
 
-**T10 — integración de la UF (change `t10-integracion-uf`):**
-
-*Resumen del recorrido.* La persona pidió una exploración de solo lectura de T10; la IA revisó el
-ticket y la documentación, el uso de UF y CLP en propiedades, créditos, registro mensual y
-dashboard, comparó proveedores de la UF (recomendó mindicador.cl) y propuso una arquitectura
-mínima. La persona **eligió otro proveedor**, findic.cl, verificado por ella con respuestas
-reales (incluida una `serie: []`), y aprobó las decisiones de diseño, y se generó el change (proposal, design, specs y
-tasks, validado en modo estricto). Antes de implementar, la persona ajustó tres puntos: la
-referencia temporal de cada equivalente (saldo inicial con `fechaOtorgamiento`, comprobada
-antes en el modelo real), la retirada del error 503 por no tener consumidores y la conversión
-a `Decimal` de un `valor` que llega como número JSON. El apply se hizo por grupos de tareas,
-deteniéndose al final de cada uno: modelo y migración (la IA la escribió sin ejecutarla; la
-persona la aplicó en `realtytrack_test` y después en desarrollo), cliente y servicio de UF,
-conversión, crédito, registro mensual, dashboard, verificación y documentación. Durante el
-proceso la persona corrigió la presentación (referencias de UF centralizadas en una sección
-en vez de repetirlas en cada monto), pidió limitar la concurrencia y aprobó un corte
-anticipado para el proveedor caído, y detectó que la ficha de propiedad no debía esperar a la
-UF, lo que llevó a métodos específicos con equivalentes. La sandbox de la IA no alcanzaba
-PostgreSQL, findic.cl ni el navegador: la IA no marcó como ejecutado lo que no pudo correr, y
-la persona ejecutó localmente las pruebas, el build, la verificación del proveedor real y la
-revisión visual. Queda como salvedad que el crédito sin `fechaOtorgamiento` tiene cobertura
-automatizada pero no se comprobó visualmente.
+**T10 — integración de la UF (change `t10-integracion-uf`).** Exploración y apply por grupos con
+detención. La IA recomendó mindicador.cl y la persona **eligió findic.cl** tras verificar sus
+respuestas reales; después ajustó la referencia temporal de cada equivalente, retiró el 503 sin
+consumidores, limitó la concurrencia y detectó que la ficha de propiedad no debía esperar a la UF.
+Salvedad: el crédito sin `fechaOtorgamiento` tiene cobertura automatizada, sin comprobación visual.
 
 > «Mantener un puerto ProveedorUf independiente del proveedor HTTP.» · «Usar el día 1 del mes como referencia para cada período.» · «No sobrescribir valores ya almacenados.» · «No estimar, interpolar ni reutilizar valores de otros períodos.» · «Usar Decimal para las conversiones monetarias.»
 >
@@ -636,11 +601,12 @@ migración no destructiva, validación sin `Number`, monto estimado del pie como
 pie/resto en el detalle del crédito, reutilizando el sistema de diseño de `rediseno-frontend` sin
 modificarlo. Decisión de producto de la persona: el pie es dato informado, no se deduce del monto
 original ni se contabiliza como egreso. La IA no pudo ejecutar migraciones ni pruebas de integración
-con PostgreSQL en su entorno; la persona las ejecutó localmente. Quedan pendientes pruebas E2E,
-revisión de seguridad, despliegue público y preparación de la entrega final.
+con PostgreSQL en su entorno; la persona las ejecutó localmente.
 
 ---
 
 ### 7. Pull Requests
 
-*Pendiente para las siguientes entregas. Entrega 1 es exclusivamente documental: no existen Pull Requests propias de este trabajo todavía, así que no hay prompts que documentar en esta sección.*
+El [PR #1](https://github.com/elianasaraith/feature-entrega-1-ESRF/pull/1)
+(`final-project-esrf` → `main`) está integrado (`54f570c`). El repositorio no registra prompts
+usados para crearlo, así que no se documenta ninguno.

@@ -8,7 +8,9 @@ la implementación.
 
 > **Estado.** El backlog es la fuente del trabajo; el estado real de cada ticket está en su
 > bloque «Estado de implementación». T01–T07, T09–T12 están implementados (T08 cancelado);
-> el despliegue en Vercel/Neon sigue siendo propuesta. Lo que un ticket describe sin bloque de
+> la aplicación está desplegada en
+> <https://realtytrack.vercel.app> (Vercel, Neon y Cloudflare R2). Las notas de verificación de
+> cada ticket describen el momento de su cierre. Lo que un ticket describe sin bloque de
 > estado es diseño.
 
 **Relación con `readme.md` §6.** La plantilla oficial exige documentar allí 3 tickets

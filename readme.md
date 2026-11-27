@@ -11,23 +11,15 @@
 
 ---
 
-> **Nota sobre el estado del proyecto.** RealtyTrack ya tiene funcionalidades
-> implementadas: autenticación de usuario único (T12), propiedades (T01), créditos
-> hipotecarios y su registro mensual (T02, T03), contratos de arriendo (T04) y montos,
-> reajustes y pagos esperados (T05), abonos con estado de pago derivado (T06) y movimientos
-> financieros (T07; implementado y verificado: suite completa con 199 pruebas, 0 fallidas y 0 omitidas,
-> build correcto, migración aplicada y revisión manual de la interfaz; ampliado con un **desglose opcional
-> en conceptos**, ver abajo) y el dashboard financiero
-> (T09; implementado y verificado: suite completa con 218 pruebas, 0 fallidas y 0 omitidas,
-> build correcto y revisión manual; sin pruebas HTTP automatizadas de 200 y 404), con pruebas automatizadas y una interfaz para esas capacidades (el estado de
-> verificación está en `docs/work-tickets.md` §4.6 y §4.7). La **integración con la UF (T10)**
-> también está implementada: valores históricos de findic.cl conservados por período y
-> equivalentes en CLP en el crédito, su registro mensual y el dashboard (ver «Estado funcional» y
-> `docs/work-tickets.md` §4.10). **El MVP no está terminado**:
-> el rediseño del frontend (`rediseno-frontend`) y el porcentaje de pie hipotecario (`porcentaje-pie-hipotecario`) están implementados, validados localmente y archivados; siguen pendientes, entre otros, las pruebas E2E, las verificaciones
-> de seguridad y el despliegue (T11, documentos, está implementado y validado contra Cloudflare R2). El ticket de aportes de capital (T08) se canceló por decisión de producto. Lo que describen las secciones para esas capacidades es diseño propuesto; cada
-> sección distingue lo implementado de lo propuesto. El detalle técnico completo vive en
-> `docs/`; este documento lo resume e integra, sin duplicarlo.
+> **Estado del proyecto (entrega final).** El MVP está **implementado y desplegado** en
+> <https://realtytrack.vercel.app> (Vercel, PostgreSQL en Neon y Cloudflare R2): acceso de
+> usuario único, propiedades, créditos hipotecarios y su registro mensual, contratos, montos y
+> reajustes, pagos de arriendo, movimientos financieros, dashboard con histórico, equivalentes
+> con la UF y documentos. El ticket de aportes de capital (T08) se canceló por decisión de
+> producto. Lo que sigue siendo propuesta o carece de evidencia se marca en cada sección. El
+> detalle técnico vive en `docs/`; este documento lo resume e integra.
+
+---
 
 ## 0. Ficha del proyecto
 
@@ -49,19 +41,29 @@ consolidación manual.
 
 ### **0.4. URL del proyecto:**
 
-No existe un despliegue público. La aplicación se evalúa **localmente** siguiendo
-las instrucciones de la sección 1.4, o mediante el **video explicativo** incluido en el
-repositorio: [`realtytrack-entrega2.mp4`](realtytrack-entrega2.mp4) (archivo en la raíz;
-en GitHub se reproduce desde el enlace, o descargando el repositorio). El despliegue en
-Vercel descrito en la sección 2.4 es un diseño propuesto, no implementado.
+**Demo en producción:** <https://realtytrack.vercel.app>
+
+- **Credenciales:** el acceso es de usuario único y no hay registro. El email y la
+  contraseña de demostración **se entregan por separado a los evaluadores** y no están en el
+  repositorio.
+- **Datos:** exclusivamente **ficticios** (seed de demostración: 3 propiedades, 6 meses de
+  histórico y 17 abonos). Los documentos se guardan en un bucket de R2 independiente para la
+  demo.
+- **Al probar:** el entorno es compartido y los cambios persisten; no ingrese datos ni
+  documentos reales. Tras 5 intentos de acceso a una cuenta en 15 minutos, el login se
+  bloquea temporalmente.
+
+El video [`realtytrack-entrega2.mp4`](realtytrack-entrega2.mp4), en la raíz, es evidencia de
+la **entrega anterior** (Entrega 2) y no muestra el rediseño ni todas las funcionalidades
+actuales.
 
 ### 0.5. URL o archivo comprimido del repositorio
 
 `https://github.com/elianasaraith/feature-entrega-1-ESRF.git`
 
-Esta entrega (Entrega 2) se desarrolla en la rama `feature/entrega-2-ESRF` —rama de
-trabajo, no parte de la URL del repositorio—; la documentación de la Entrega 1 se
-conserva en `feature/entrega-1-ESRF` y la rama por defecto del remoto es `main`.
+La **entrega final** está en la rama `final-project-esrf`, integrada en `main` mediante el
+PR #1 (sección 7). Las ramas `feature/entrega-1-ESRF` y `feature/entrega-2-ESRF` conservan
+las entregas anteriores.
 
 ---
 
@@ -107,10 +109,10 @@ Detalle completo: [docs/product.md](docs/product.md) §1–§3.
    neto, saldo de créditos y estado de
    las obligaciones de arriendo, a nivel de cartera y por propiedad, estable
    frente a variaciones posteriores de la UF.
-6. **Almacenamiento de documentos** (transversal) — cada documento asociado a
+6. **Almacenamiento de documentos** (complementaria y transversal) — cada documento asociado a
    su propiedad y, cuando corresponde, al crédito, contrato o abono que
    respalda.
-7. **Acceso protegido** (transversal) — usuario único, email y contraseña.
+7. **Acceso protegido** (complementaria y transversal) — usuario único, email y contraseña.
 
 Detalle completo: [docs/product.md](docs/product.md) §5–§6.
 
@@ -120,16 +122,11 @@ Detalle completo: [docs/product.md](docs/product.md) §5–§6.
 
 **Estado:** la interfaz está implementada para acceso (`/login`), propiedades,
 crédito hipotecario con su registro mensual, contratos y montos de arriendo
-(`app/propiedades/**`, `app/(auth)/login`). Un recorrido de la aplicación en
-funcionamiento está en el video [`realtytrack-entrega2.mp4`](realtytrack-entrega2.mp4);
-este documento no incluye capturas. También están implementadas las vistas de abonos
+(`app/propiedades/**`, `app/(auth)/login`). La interfaz actual puede recorrerse en la demo
+(sección 0.4); este documento no incluye capturas. También están implementadas las vistas de abonos
 (pagos del contrato), de movimientos financieros —con registro simple o desglosado en
-conceptos— y del dashboard; la vista de documentos (`/propiedades/[id]/documentos`) está implementada. El siguiente diagrama resume el **flujo de navegación previsto** (los
-nodos `app/dashboard` y `app/contratos` son diseño; en la aplicación actual los
-contratos viven bajo `app/propiedades/[id]/contratos`), construido a partir de las
-vistas definidas en
-[docs/architecture.md](docs/architecture.md) §7 y la estructura de `app/` de
-§6:
+conceptos— y del dashboard; la vista de documentos (`/propiedades/[id]/documentos`)
+también está implementada. El siguiente diagrama resume el **flujo de navegación**:
 
 ```mermaid
 flowchart TD
@@ -137,30 +134,35 @@ flowchart TD
     Cartera --> Detalle["Detalle de propiedad<br/>crédito · contrato · pagos · egresos · documentos"]
     Cartera --> Dashboard["Dashboard mensual<br/>app/dashboard"]
     Detalle --> Registro["Registro mensual del crédito<br/>app/propiedades/[id]/credito/registro-mensual"]
-    Detalle --> Contrato["Contratos, reajustes, pagos y abonos<br/>app/contratos"]
+    Detalle --> Contrato["Contratos, reajustes, pagos y abonos<br/>app/propiedades/[id]/contratos"]
     Dashboard -.->|"abrir propiedad"| Detalle
 ```
 
-Las vistas de consulta se complementarán con los formularios de registro
-previstos (alta de propiedad, crédito, contrato, reajuste, abono y movimiento). Ningún cálculo financiero pertenece a la UI: los importes llegan ya
-derivados desde la capa de servicios (`docs/architecture.md` §7).
+Los formularios de registro (propiedad, crédito, contrato, reajuste, abono y movimiento)
+forman parte de estas vistas. Ningún cálculo financiero pertenece a la UI: los importes
+llegan ya derivados desde la capa de servicios (`docs/architecture.md` §7).
 
 ### **1.4. Instrucciones de instalación:**
 
-La aplicación se ejecuta **en local**; no hay despliegue público (sección 0.4). Si prefieres
-no instalarla, el video [`realtytrack-entrega2.mp4`](realtytrack-entrega2.mp4) muestra la
-aplicación funcionando.
+Para evaluar el producto **no hace falta instalar nada**: use la demo de la sección 0.4.
+Las instrucciones siguientes son para ejecutarlo en local.
 
 **Stack implementado** (`package.json`): Next.js 16 (App Router) + React 19 +
 TypeScript, Tailwind CSS 4, Route Handlers como API REST, Prisma 6 sobre
 PostgreSQL, Auth.js (`next-auth` 5 beta, proveedor de credenciales con sesión JWT),
 `argon2` para el hash de la contraseña, Zod 4 para validar entradas, y pruebas con el
 ejecutor nativo `node --test` (+ `tsx`), y la API pública de UF de findic.cl (consultada
-con `fetch` nativo). **Aún no implementado** (diseño propuesto): object storage S3 y
-Vercel/Neon.
+con `fetch` nativo). Producción: Vercel, Neon (PostgreSQL) y Cloudflare R2 (API S3).
 
-**Requisitos previos:** Node.js (≥ 20; desarrollado con 23.11) con npm, y Docker con
-Docker Compose para la base de datos local.
+**Requisitos previos:** Git, Node.js (desarrollado con 23.11; Next.js 16 exige 20.9 o
+superior y `npm test` necesita una versión que admita `--env-file-if-exists`) con npm, y
+Docker con Docker Compose para la base de datos local.
+
+```bash
+git clone https://github.com/elianasaraith/feature-entrega-1-ESRF.git
+cd feature-entrega-1-ESRF
+git checkout final-project-esrf
+```
 
 **1. Instalar dependencias**
 
@@ -175,14 +177,21 @@ npm install
 cp .env.example .env
 ```
 
-Variables que usa el código: `DATABASE_URL` y `DIRECT_URL` (conexión a PostgreSQL;
-Prisma las lee de `.env`), `SEED_USER_EMAIL` y `SEED_USER_PASSWORD` (credenciales del
-usuario único que crean los seeds), el secreto de sesión de Auth.js (`AUTH_SECRET`,
-estándar de Auth.js v5; confirma su nombre en `.env.example`) y, solo para las pruebas
-de integración, `TEST_DATABASE_URL`. Para documentos, las cinco variables `S3_*` descritas en «Configuración de
-documentos» y `DOCUMENT_UPLOAD_SECRET`. Para la protección CSRF, `APP_ORIGINS` (obligatoria en producción). Opcionalmente `UF_API_BASE_URL` (endpoint de la API de
-UF; por defecto `https://findic.cl/api/uf`, sin API key). Para la base local de Docker Compose la URL tiene
-la forma `postgresql://realtytrack:<contraseña de docker-compose.yml>@localhost:5436/realtytrack`.
+Variables que usa el código (solo nombres; los valores nunca se versionan):
+
+| Variable | Cuándo se necesita |
+|---|---|
+| `DATABASE_URL`, `DIRECT_URL` | Siempre: conexión a PostgreSQL (aplicación y migraciones) |
+| `AUTH_SECRET` | Secreto de sesión de Auth.js; obligatorio en producción |
+| `SEED_USER_EMAIL`, `SEED_USER_PASSWORD` | Usuario único que crean los seeds locales |
+| `APP_ORIGINS` | Orígenes confiables para mutaciones; obligatoria en producción (en local, sin ella se admite `http://localhost:3000`) |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `DOCUMENT_UPLOAD_SECRET` | Solo para documentos (ver «Configuración de documentos») |
+| `UF_API_BASE_URL` | Opcional; por defecto `https://findic.cl/api/uf`, sin API key |
+| `TEST_DATABASE_URL` | Pruebas de integración y E2E; base exclusiva de pruebas |
+| `DEMO_SEED_TARGET_HOST`, `DEMO_USER_EMAIL`, `DEMO_USER_PASSWORD` | Solo para el seed de demostración |
+
+Para la base local de Docker Compose la URL tiene la forma
+`postgresql://realtytrack:<contraseña de docker-compose.yml>@localhost:5436/realtytrack`.
 
 **3. Iniciar PostgreSQL con Docker Compose** (PostgreSQL 16, puerto `5436`, base y
 usuario `realtytrack`; la contraseña de desarrollo local está en `docker-compose.yml`):
@@ -212,7 +221,7 @@ npm run db:seed:user
 npm run dev              # http://localhost:3000 → redirige a /login
 ```
 
-Inicia sesión con `SEED_USER_EMAIL` / `SEED_USER_PASSWORD`. Otros scripts: `npm run build`,
+Inicia sesión en local con `SEED_USER_EMAIL` / `SEED_USER_PASSWORD`. Otros scripts: `npm run build`,
 `npm start`, `npm run lint`.
 
 **7. Ejecutar las pruebas**
@@ -227,8 +236,17 @@ Las pruebas unitarias no requieren base de datos. Las de integración **solo esc
 comprobarse el aislamiento, esas pruebas se omiten. Para ejecutarlas, crea una base
 aparte —por ejemplo `docker compose exec db createdb -U realtytrack realtytrack_test`—,
 aplícale las migraciones con `DATABASE_URL` y `DIRECT_URL` apuntando a ella y define
-`TEST_DATABASE_URL` en `.env`. Resultado verificado en el desarrollo de T05:
-144 pruebas, 0 fallidas, 0 omitidas.
+`TEST_DATABASE_URL` en `.env`. Las pruebas E2E y los resultados de la validación final están en
+la sección 2.6.
+
+**Seed de demostración (mantenimiento del entorno de demo; no es necesario para evaluar).**
+`npm run db:seed:demo` ejecuta `prisma/seed-demo.ts` cargando `.env.production.local`
+(ignorado por Git), con `DATABASE_URL`, `DEMO_SEED_TARGET_HOST`, `DEMO_USER_EMAIL` y
+`DEMO_USER_PASSWORD` (12 caracteres como mínimo). Carga solo datos ficticios, con fechas
+relativas al día de ejecución, y es repetible (ids deterministas y *upsert*). Se niega a
+ejecutarse si el destino es local, si el host no coincide con el confirmado o si la base
+contiene propiedades ajenas a la demo; si ya existe un usuario, no cambia sus credenciales.
+Se ejecutó con éxito en Neon: 3 propiedades, 6 meses de histórico y 17 abonos.
 
 **Estado funcional.** Implementado: acceso de usuario único (T12), propiedades (T01),
 crédito hipotecario (T02) y su registro mensual (T03), arrendatarios y contratos (T04),
@@ -236,9 +254,9 @@ montos, reajustes y pagos esperados (T05), abonos con estado de pago derivado (T
 movimientos financieros como egresos manuales (T07: migración
 `20261109120000_add_movimiento_financiero` aplicada, suite completa con 199 pruebas sin
 fallos ni omisiones, build correcto y revisión manual de la interfaz) y dashboard
-financiero (T09: `/dashboard` y resumen mensual en el detalle de la propiedad; implementado,
-suite completa de 218 pruebas sin fallos ni omisiones, build y revisión manual correctos; su
-equivalente en CLP del saldo en UF se añadió después con T10).
+financiero (T09: `/dashboard` y resumen mensual en el detalle de la propiedad; su
+equivalente en CLP del saldo en UF se añadió después con T10). Los conteos de pruebas
+citados por ticket son históricos, de cuando se cerró cada uno.
 **Ampliación de T07 — gasto simple o desglosado:** un movimiento puede registrarse como un
 único monto o desglosado en 1 a 50 conceptos, cada uno con nombre y monto en CLP. La suma de
 los conceptos es el total del movimiento, calculado en el servidor y guardado en
@@ -287,7 +305,7 @@ gasto desglosado contado una sola vez) no se modifican; la ficha de propiedad no
 El error de dependencia externa (503) para operaciones cuyo resultado principal dependa de la
 UF **no está implementado**: ninguna lo necesita todavía.
 
-*Verificación (ejecutada por el usuario en su entorno local):* `npm test` con 352 pruebas, 0
+*Verificación histórica de T10 (ejecutada por el usuario en su entorno local):* `npm test` con 352 pruebas, 0
 fallidas y 0 omitidas; TypeScript y ESLint sin errores; `npm run build` correcto; consulta real
 a findic.cl (`01-03-2026` → 39796.31; `01-01-2030` → `serie: []`) y del cliente
 (`ok` y `sin-datos`); revisión visual del crédito, el registro mensual y el dashboard, con
@@ -309,33 +327,31 @@ automatizada, pero **no se comprobó visualmente**. Detalle: `docs/work-tickets.
   solo escribe en una clave temporal (`tmp/…`); el backend valida el objeto, fija su ETag y lo promueve a la
   clave definitiva, sobre la que el navegador nunca tiene permiso de escritura (una URL firmada reutilizada no
   puede modificar un documento registrado). Cuotas de la demostración: 50 documentos y 200 MB por propiedad,
-  1 GB global. Subida, descarga y eliminación física se validaron contra R2 real **antes** de este cambio; el
-  flujo de promoción está probado con simulaciones y **pendiente de verificar contra R2 real**.
+  1 GB global. Subida, descarga y eliminación física se validaron contra R2 real al cerrar T11; la
+  carga con el flujo actual se **validó manualmente contra R2 real desde la aplicación desplegada en
+  Vercel**.
 
 **Configuración de documentos (Cloudflare R2).** Variables de entorno **solo de servidor** (nunca
 `NEXT_PUBLIC_*`): `S3_ENDPOINT` (`https://<cuenta>.r2.cloudflarestorage.com`), `S3_REGION`
 (`auto`), `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`. En R2: bucket **privado** (sin
 acceso público), un token de API S3 con lectura y escritura limitadas a ese bucket y una regla
 CORS que permita `PUT` desde el origen de la aplicación con la cabecera `Content-Type`. Sin
-estas variables la aplicación funciona y las operaciones de documentos responden 503. La
-migración `20261123120000_add_documento` debe aplicarse antes (`npx prisma migrate deploy`).
+estas variables la aplicación funciona y las operaciones de documentos responden 503.
 
-**Cambios de `seguridad-mvp` que exigen configuración (no automatizada):**
+**Configuración adicional de `seguridad-mvp`:**
 
-- *Migraciones nuevas, pendientes de aplicar* (aditivas, sin tocar datos):
-  `20261125120000_add_login_intento` y `20261125120100_add_documento_subida`. Primero en la base de pruebas
-  (`TEST_DATABASE_URL`) y luego `npx prisma migrate deploy` en Neon con la conexión directa.
-- *Variables nuevas:* `DOCUMENT_UPLOAD_SECRET` (secreto de los tokens de subida; generar un valor aleatorio
-  largo, distinto de `AUTH_SECRET` y de las credenciales de R2) y `APP_ORIGINS` (p. ej.
-  `https://<tu-app>.vercel.app`; sin ella toda mutación de la API se rechaza). `S3_ENDPOINT` debe estar definida
-  también **en el build** (alimenta el `connect-src` de la CSP; si cambia hay que reconstruir). `AUTH_SECRET` es
-  obligatorio en producción (sin él el acceso se cierra). Tras el despliegue las sesiones emitidas antes se
-  invalidan una vez. `.env.example` debe listarlas (pendiente: no pude editarlo, ver informe).
-- *Cloudflare R2:* regla *Lifecycle* que expire los objetos del prefijo `tmp/` a 1 día (24 h) y CORS del
-  bucket con `PUT` desde cada origen de `APP_ORIGINS` y la cabecera `Content-Type`.
+- *Migraciones:* las **17 migraciones** del repositorio, incluidas
+  `20261125120000_add_login_intento` y `20261125120100_add_documento_subida`, están **aplicadas en
+  Neon**.
+- *Variables:* `DOCUMENT_UPLOAD_SECRET` (secreto de los tokens de subida; valor aleatorio largo,
+  distinto de `AUTH_SECRET` y de las credenciales de R2) y `APP_ORIGINS` (sin ella, en producción
+  toda mutación de la API se rechaza). `S3_ENDPOINT` debe estar definida también **en el build**
+  (alimenta el `connect-src` de la CSP; si cambia hay que reconstruir). `AUTH_SECRET` es obligatorio
+  en producción (sin él el acceso se cierra).
+- *Cloudflare R2:* se requiere CORS con `PUT` desde cada origen de `APP_ORIGINS` y la cabecera
+  `Content-Type`, y se recomienda una regla *Lifecycle* que expire el prefijo `tmp/` a 1 día
+  (la activación de esta regla no tiene evidencia registrada).
 - *Build:* `npm run build` ejecuta `prisma generate && next build`.
-
-**Pendiente antes de la entrega final (jueves 26 de noviembre de 2026):** pruebas E2E, revisión de seguridad, despliegue público (Vercel y Neon, propuesto) y preparación de la entrega final.
 
 ---
 
@@ -382,9 +398,8 @@ flowchart TB
     ST -->|"firma URLs"| S3
 ```
 
-*(Diagrama de la arquitectura del MVP: la aplicación, la API REST, Prisma/PostgreSQL y
-Auth.js y la integración con la API de UF (findic.cl) están implementados; el almacenamiento
-de documentos y el despliegue siguen siendo diseño propuesto. Fuente versionable: [docs/diagrams/architecture.mmd](docs/diagrams/architecture.mmd).)*
+*(Arquitectura implementada y desplegada: Vercel, Neon y Cloudflare R2, con la API de UF de
+findic.cl. Fuente versionable: [docs/diagrams/architecture.mmd](docs/diagrams/architecture.mmd).)*
 
 RealtyTrack es una **aplicación full-stack única** —un repositorio, un
 despliegue, una base de datos—, organizada en cuatro capas (UI, API,
@@ -418,7 +433,7 @@ contrato y configuración para servir a un único consumidor.
 | Dominio (`server/domain/`) | TypeScript, funciones puras | Reglas con precedencia: estado del pago, fecha de completitud, monto vigente, conversión UF→CLP |
 | Persistencia (`server/db/`) | Prisma + PostgreSQL (Neon) | Acceso a datos, tipado generado desde el esquema |
 | Integración UF (`server/uf/`) | Puerto `ProveedorUf`, cliente findic.cl, servicio con persistencia idempotente | Obtener y conservar el valor de la UF por período (día 1), sin estimar; equivalentes en CLP opcionales |
-| Documentos (`server/storage/`) | Puerto `AlmacenDocumentos`, API S3 | URL firmada de subida/lectura, borrado; proveedor concreto *propuesta a validar* |
+| Documentos (`server/storage/`) | Puerto `AlmacenDocumentos`, API S3 | URL firmada de subida/lectura, borrado; proveedor: Cloudflare R2 |
 | Autenticación (`auth`) | Auth.js, JWT, middleware | Sesión de usuario único; protege UI y API |
 
 Detalle: [docs/architecture.md](docs/architecture.md) §3, §5.
@@ -441,12 +456,15 @@ server/
   db/               Prisma Client                                       [implementado]
   errors.ts         errores de dominio tipados → HTTP                   [implementado]
   uf/               puerto ProveedorUf, cliente findic.cl, servicio UF  [implementado]
-  storage/          puerto del object storage                           [previsto]
+  storage/          puerto de documentos y cliente S3 (Cloudflare R2)   [implementado]
 prisma/
   schema.prisma     esquema, espejo de docs/data-model.md
   migrations/       migraciones versionadas
-  seed.ts           carga inicial ficticia (usuario + propiedades)
+  seed.ts           carga local ficticia (usuario + propiedades)
+  seed-user.ts      solo el usuario (lógica en seed-usuario.ts)
+  seed-demo.ts      datos ficticios del entorno de demostración
 tests/              unitarias e integración (node --test)
+e2e/                pruebas extremo a extremo (Playwright)
 openspec/           especificaciones y cambios archivados (Spec-Driven Development)
 ```
 
@@ -459,29 +477,29 @@ silencio (`docs/architecture.md` §6).
 
 ### **2.4. Infraestructura y despliegue**
 
-> Diseño propuesto; a la fecha no existe despliegue real (la aplicación se ejecuta en
-> local, sección 1.4).
+**Implementado.** La aplicación está desplegada y operativa en
+<https://realtytrack.vercel.app>.
 
 ```mermaid
 flowchart LR
-    Dev["Repositorio Git"] -->|"push a rama"| Preview["Vercel<br/>despliegue de vista previa"]
-    Dev -->|"merge a main"| Prod["Vercel<br/>producción"]
-    Prod --> NeonProd[("Neon<br/>base de producción")]
-    Prod --> S3P[("Object storage")]
-    Preview --> NeonPrev[("Base para vistas previa<br/>estrategia pendiente")]
+    Navegador["Navegador"] --> Prod["Vercel<br/>realtytrack.vercel.app"]
+    Prod --> NeonProd[("Neon<br/>PostgreSQL")]
+    Prod --> UF["findic.cl<br/>API de UF"]
+    Prod -->|"firma URLs"| R2[("Cloudflare R2<br/>bucket privado de demo")]
+    Navegador -->|"subida directa con URL firmada"| R2
 ```
 
-| Aspecto | Decisión prevista |
+| Aspecto | Estado |
 |---|---|
-| Alojamiento | Vercel, conectado al repositorio |
-| Vistas previa | Cada PR genera un despliegue propio |
-| Producción | Despliegue desde `main` |
-| Base de datos | Neon (PostgreSQL) |
+| Alojamiento | Vercel (aplicación Next.js, un único despliegue) |
+| Base de datos | Neon (PostgreSQL), con las 17 migraciones aplicadas |
+| Documentos | Cloudflare R2, con un bucket independiente para la demo |
 | Migraciones | Paso deliberado, no encadenado al build |
+| Datos | Seed de demostración, exclusivamente ficticio |
+| Verificación | Pruebas manuales satisfactorias en producción: carga de documentos contra R2 y edición de registros existentes |
 
-Pendiente de decisión (*propuesta a validar*): aislamiento de datos entre
-despliegues de vista previa —base compartida vs. Neon *branching* por PR—
-(`docs/architecture.md` §15.2).
+Pendiente (*propuesta a validar*): aislamiento de datos de los despliegues de vista previa —base
+compartida vs. Neon *branching*— (`docs/architecture.md` §15.2).
 
 Detalle: [docs/architecture.md](docs/architecture.md) §15.
 
@@ -501,8 +519,7 @@ Detalle: [docs/architecture.md](docs/architecture.md) §15.
 - Pruebas de integración aisladas: solo escriben en `TEST_DATABASE_URL`, distinta de la
   base de desarrollo.
 
-**Endurecimiento previo al despliegue público (`seguridad-mvp`, implementado y probado con simulaciones;
-verificaciones reales pendientes):**
+**Endurecimiento previo al despliegue público (`seguridad-mvp`, implementado y desplegado):**
 
 - *Login:* límite persistente en PostgreSQL (serverless-safe) de **5 intentos por cuenta y 20 por IP cada
   15 minutos**, con reserva atómica del intento antes de verificar, claves HMAC (sin emails ni IP en claro), IP
@@ -517,7 +534,7 @@ verificaciones reales pendientes):**
   `X-Powered-By`. **Riesgo residual:** `script-src` mantiene `'unsafe-inline'` (hidratación de Next.js con Cache
   Components; una CSP con *nonce* obligaría a renderizado dinámico): la CSP no frenaría un XSS en línea; se
   compensa con `object-src 'none'`, `base-uri`, `form-action`, `frame-ancestors` y `connect-src` acotado.
-- *Documentos:* subida en dos fases con promoción (ver §2.4), token de un solo uso con el secreto independiente
+- *Documentos:* subida en dos fases con promoción (ver §1.4), token de un solo uso con el secreto independiente
   `DOCUMENT_UPLOAD_SECRET`, cuotas con reservas y limpieza de temporales.
 - Bucket de documentos privado; el acceso es siempre por URL firmada de vida corta, nunca público.
 - Sin prefijo público de Next.js en credenciales.
@@ -531,34 +548,39 @@ El resultado filtrado (`--omit=dev --omit=optional --omit=peer`, 0) **no** prueb
 **Limitaciones del MVP:** un tercero puede bloquear la cuenta 15 minutos; sin MFA ni revocación global de
 sesiones; el límite de intentos cubre solo el login; limpieza de reservas oportunista (sin tarea programada).
 
-**Verificaciones pendientes antes de publicar:** aplicar las migraciones y ejecutar las pruebas de integración en
-la base de pruebas (el SQL crudo no se ha ejecutado contra PostgreSQL); en R2 real, que el ETag sea el MD5 del
-contenido y se conserve tras `CopyObject`, y que la copia prefirmada funcione (si no, la promoción **no queda
-resuelta**); la CSP en un navegador real; cabeceras, cookies, `AUTH_SECRET`, `APP_ORIGINS` y `sslmode=require` en
-Vercel/Neon; y `next build` con Turbopack. Detalle en [docs/architecture.md](docs/architecture.md) §11.5.
+**Verificaciones:** en producción las migraciones están aplicadas, la aplicación se compila y
+despliega en Vercel y la carga de documentos se validó contra R2 real. **No hay evidencia
+registrada** de comprobaciones específicas de la CSP en navegador, de cabeceras y cookies, de la
+igualdad ETag/MD5 en R2 ni de escrituras concurrentes sobre la promoción. Detalle en
+[docs/architecture.md](docs/architecture.md) §11.5.
 
 **Regla de datos (vigente):** los datos reales de las propiedades se anonimizan antes de
 versionar (nombres, RUT, direcciones, montos, documentos) y se cargan por un script de
-seed controlado, no por un importador; el seed actual solo contiene datos ficticios.
+seed controlado, no por un importador; los seeds del repositorio solo contienen datos ficticios.
 
 Detalle: [docs/architecture.md](docs/architecture.md) §11, §13, §16.
 
 ### **2.6. Tests**
 
-> **Estado real:** hay pruebas automatizadas ejecutables con `npm test` (`node --test`):
-> **352 pruebas, 0 fallidas, 0 omitidas** en la última ejecución verificada (desarrollo
-> de T10, ejecutada por el usuario con PostgreSQL local), cubriendo unitarias de esquemas y
-> dominio, integración de servicios contra PostgreSQL de pruebas aislada, control de acceso de
-> la API (`tests/auth/proxy.test.ts`) y la integración de UF: cliente con `fetch` simulado,
-> concurrencia máxima y corte anticipado, persistencia idempotente, y equivalentes de crédito,
-> registro mensual y dashboard con cálculos financieros idénticos con y sin UF.
-> Existen cinco pruebas extremo a extremo con Playwright (`npm run test:e2e`, ver «Pruebas
-> E2E» abajo), **no ejecutadas en el entorno de desarrollo asistido por IA** (sandbox sin
-> PostgreSQL, puerto local ni descarga de Chromium): su ejecución la confirma la persona en
-> local (las dos primeras ya pasaron). No hay pruebas de componentes de interfaz; la interfaz se verificó
-> manualmente. La tabla describe la estrategia completa.
+> **Estado real:** hay pruebas unitarias y de integración (`npm test`, `node --test`) para
+> propiedades, créditos, contratos, pagos, movimientos, dashboard, UF, documentos, autenticación y
+> seguridad, y **cinco pruebas extremo a extremo** con Playwright (`npm run test:e2e`). No hay
+> pruebas de componentes de interfaz; la interfaz se verificó manualmente. La tabla describe la
+> estrategia.
 
-| Nivel | Qué cubriría | Por qué ahí |
+**Validación final** (ejecución local de la autora el 26-11-2026, sobre el código del commit
+`60b4fb8`; horas de Chile):
+
+| Comando | Resultado | Evidencia |
+|---|---|---|
+| `npm test` | **Todas las pruebas pasaron** (22:03). No se registra el conteo exacto | Confirmación de la autora y código de salida 0 en el registro local de npm. Una ejecución anterior (22:02) terminó con código 1; no se conserva la causa |
+| `npm run test:e2e` (dos ejecuciones consecutivas) | **5 de 5 correctas en ambas** (22:03 y 22:05), sin otra ejecución E2E entre ellas | Confirmación de la autora y código de salida 0 de ambas en el registro local de npm. Reporte de Playwright de la segunda: 0 fallidas, 0 omitidas, 0 inestables (34 s); el de la primera fue sobrescrito |
+| `npm run build` | Correcto (código de salida 0, 22:04, entre las dos ejecuciones E2E) | Registro local de npm y artefacto `.next/BUILD_ID` |
+
+Los registros y reportes son locales y no se versionan. Los conteos citados por ticket en
+`docs/work-tickets.md` y en la sección 1.4 son históricos.
+
+| Nivel | Qué cubre la estrategia | Por qué ahí |
 |---|---|---|
 | Unitario sobre el dominio | Precedencia de los cuatro estados del pago y sus calificaciones, fecha de completitud, monto vigente ante reajuste retroactivo, conversión UF→CLP | Funciones puras; se prueban con tablas de casos, sin base de datos |
 | Integración de servicios | Invariantes que la base no impone: no solapamiento de contratos, documento coherente con su propiedad, monto esperado alineado con `contrato_monto` | Requieren PostgreSQL real |
@@ -587,8 +609,9 @@ propiedad:
 Fechas deterministas (meses fijos del pasado salvo el flujo principal, que usa el mes en
 curso) y meses distintos por escenario para que las cifras exactas del dashboard no se
 contaminen. La UF se obtiene de un proveedor simulado local (`e2e/uf-stub.mjs`, puerto 3101,
-sin red) y no se usa R2. Estado: los dos primeros escenarios fueron ejecutados por la persona en local
-(2 passed); los tres nuevos están **implementados y pendientes de ejecución local**.
+sin red) y no se usa R2. Estado: **los cinco escenarios finalizaron correctamente**, en dos
+ejecuciones consecutivas con 5 de 5 en ambas (ver «Validación final»). El entorno de desarrollo asistido por IA no
+podía ejecutarlos. Los documentos no tienen prueba E2E.
 
 - **Aislamiento y repetibilidad:** solo usa `TEST_DATABASE_URL`, que debe ser una base
   **exclusiva de pruebas** (distinta de `DATABASE_URL`/`DIRECT_URL` y con «test» o «e2e» en el
@@ -768,6 +791,29 @@ erDiagram
         timestamptz subido_en "NOT NULL"
     }
 
+    DOCUMENTO_SUBIDA {
+        uuid id PK
+        uuid propiedad_id FK "NOT NULL"
+        tipo_documento tipo "NOT NULL"
+        text nombre_archivo "NOT NULL"
+        text mime_type "NOT NULL"
+        bigint tamano_bytes "NOT NULL - mayor que 0"
+        text clave_temporal UK "NOT NULL"
+        text clave_definitiva UK "NOT NULL"
+        estado_subida estado "NOT NULL"
+        timestamptz expira_en "NOT NULL"
+        timestamptz reclamada_en "NULL"
+        uuid documento_id FK "NULL - UNIQUE"
+        timestamptz creada_en "NOT NULL"
+    }
+
+    LOGIN_INTENTO {
+        text clave PK "HMAC de cuenta o IP"
+        integer contador "NOT NULL"
+        timestamptz ventana_inicio "NOT NULL"
+        timestamptz actualizado_en "NOT NULL"
+    }
+
     PROPIEDAD ||--o| CREDITO_HIPOTECARIO : "tiene como maximo uno"
     CREDITO_HIPOTECARIO ||--o{ CREDITO_REGISTRO_MENSUAL : "registra mes a mes"
     PROPIEDAD ||--o{ CONTRATO_ARRIENDO : "arrienda mediante"
@@ -782,17 +828,16 @@ erDiagram
     CONTRATO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
     ABONO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
     MOVIMIENTO_FINANCIERO ||--o{ DOCUMENTO : "respaldado por"
+    PROPIEDAD ||--o{ DOCUMENTO_SUBIDA : "reserva"
+    DOCUMENTO |o--o| DOCUMENTO_SUBIDA : "se completa desde"
 ```
 
-*(Modelo lógico del MVP: están en el esquema Prisma las entidades de propiedad, crédito y
-registro mensual, usuario, arrendatario, contrato, `contrato_monto`, `pago_esperado`,
-`abono_arriendo`, `movimiento_financiero`, `movimiento_concepto` y `valor_uf_periodo`; el
-resto (documentos) es diseño propuesto. Fuente versionable:
+*(Modelo implementado: las 15 entidades están en el esquema Prisma. Fuente versionable:
 [docs/diagrams/data-model.mmd](docs/diagrams/data-model.mmd).)*
 
-`USUARIO` y `VALOR_UF_PERIODO` no tienen relaciones: el primero solo guarda
-credenciales de un usuario único, y el segundo es una tabla de referencia
-consultada por período.
+`USUARIO`, `VALOR_UF_PERIODO` y `LOGIN_INTENTO` no tienen relaciones: el primero solo guarda
+credenciales de un usuario único, el segundo es una tabla de referencia consultada por período
+y el tercero un contador de intentos de acceso.
 
 ### **3.2. Descripción de entidades principales:**
 
@@ -811,6 +856,8 @@ consultada por período.
 | `movimiento_concepto` | Concepto (nombre y monto) de un gasto desglosado; parte del movimiento, no un movimiento aparte | PK `id`; FK `movimiento_financiero_id` | `ON DELETE CASCADE`; `CHECK` monto > 0; sin conceptos = gasto simple (los movimientos existentes no se migran) |
 | `valor_uf_periodo` | Valor de la UF asociado a cada período mensual (día 1) | PK `periodo` (día 1) | No se sobrescribe por una consulta posterior a la API, una vez almacenado; `CHECK` valor > 0 y período día 1; guarda `fecha_valor`, `fuente` y `obtenido_en` |
 | `documento` | Metadata de los archivos; el binario vive en object storage | PK `id`; FK `propiedad_id` obligatoria + 4 FK específicas opcionales | `CHECK`: a lo sumo una de las cuatro FK opcionales es no nula |
+| `documento_subida` | Reserva de un solo uso para la subida en dos fases | PK `id`; FK `propiedad_id`, `documento_id` | Claves temporal y definitiva únicas y distintas; estado y vencimiento |
+| `login_intento` | Límite persistente de intentos de acceso | PK `clave` (HMAC) | Sin email ni IP en claro |
 
 Detalle exhaustivo de cada atributo, tipo y restricción:
 [docs/data-model.md](docs/data-model.md) §4.
@@ -866,13 +913,9 @@ uno ilustra una regla de diseño distinta del modelo: una operación de
 producto que orquesta varias escrituras, la frontera entre lo que se escribe
 y lo que se deriva, y la agregación mensual que respeta la regla de caja.
 
-Estos son los contratos del MVP. El endpoint 4.1 (T05) está **implementado y
-verificado**; el 4.2 (abonos, T06) está **implementado** (verificado con 179 pruebas y revisión visual de la interfaz,
-`docs/work-tickets.md` §4.6); el 4.3 (dashboard, T09) sigue siendo un
-**contrato propuesto**, aún no implementado. Donde el detalle exacto de un campo no está fijado por
-`docs/architecture.md` o `docs/data-model.md`, se marca explícitamente como
-**contrato API propuesto de Entrega 1**, para no presentarlo como una
-decisión ya cerrada.
+Estos son contratos del MVP y los tres endpoints están **implementados**: 4.1 (T05), 4.2 (abonos,
+T06) y 4.3 (dashboard, T09). Las cifras de verificación citadas corresponden al cierre de cada
+ticket.
 
 ### 4.1 `POST /api/propiedades/{propiedadId}/contratos/{contratoId}/montos`
 
@@ -1075,6 +1118,10 @@ conserva. Los importes viajan como texto para no perder precisión.
 ---
 
 ## 5. Historias de Usuario
+
+**HU01, HU02 y HU03 son las tres historias *must-have* del MVP** y están implementadas. El
+**acceso protegido** y la **gestión de documentos** son capacidades complementarias y
+transversales, también implementadas (secciones 1.2 y 2.5).
 
 **Historia de Usuario 1 — HU01: Administrar una propiedad y su crédito hipotecario**
 
@@ -1312,9 +1359,18 @@ Ticket de origen, con el alcance full-stack completo:
 
 ## 7. Pull Requests
 
-Pendiente: no hay pull requests de este trabajo todavía. El desarrollo se versiona por
-commits en `feature/entrega-2-ESRF` (ver `git log`); la evidencia de PR se añadirá
-cuando se abra. Las únicas fusiones visibles en
-el historial de este repositorio (`#107`, `#111`) corresponden a trabajo de
-otros colaboradores sobre el repositorio base, ya revertido, y no son pull
-requests de esta entrega.
+**[PR #1](https://github.com/elianasaraith/feature-entrega-1-ESRF/pull/1) —
+`final-project-esrf` → `main` (integrado).** Commit de fusión `54f570c` (26-11-2026). El historial
+que incorpora va desde la documentación de la Entrega 1 hasta el MVP y su preparación para
+producción; sus últimos commits son:
+
+| Commit | Contenido |
+|---|---|
+| `29084d4` | Valores históricos de la UF y equivalentes en CLP (T10) |
+| `1d17d44` | Módulos funcionales del MVP |
+| `9322288` | Rediseño del frontend y porcentaje de pie hipotecario |
+| `ab2aa34` | Endurecimiento de seguridad y pruebas E2E |
+| `60b4fb8` | Seed de demostración y configuración de entorno |
+
+Es el único pull request documentado de este trabajo. Las fusiones `#107` y `#111` visibles en el
+historial corresponden a trabajo de otros colaboradores sobre el repositorio base, ya revertido.

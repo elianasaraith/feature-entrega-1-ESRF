@@ -233,6 +233,29 @@ erDiagram
         timestamptz subido_en "NOT NULL"
     }
 
+    DOCUMENTO_SUBIDA {
+        uuid id PK
+        uuid propiedad_id FK "NOT NULL"
+        tipo_documento tipo "NOT NULL"
+        text nombre_archivo "NOT NULL"
+        text mime_type "NOT NULL"
+        bigint tamano_bytes "NOT NULL - mayor que 0"
+        text clave_temporal UK "NOT NULL"
+        text clave_definitiva UK "NOT NULL"
+        estado_subida estado "NOT NULL"
+        timestamptz expira_en "NOT NULL"
+        timestamptz reclamada_en "NULL"
+        uuid documento_id FK "NULL - UNIQUE"
+        timestamptz creada_en "NOT NULL"
+    }
+
+    LOGIN_INTENTO {
+        text clave PK "HMAC de cuenta o IP"
+        integer contador "NOT NULL"
+        timestamptz ventana_inicio "NOT NULL"
+        timestamptz actualizado_en "NOT NULL"
+    }
+
     PROPIEDAD ||--o| CREDITO_HIPOTECARIO : "tiene como maximo uno"
     CREDITO_HIPOTECARIO ||--o{ CREDITO_REGISTRO_MENSUAL : "registra mes a mes"
     PROPIEDAD ||--o{ CONTRATO_ARRIENDO : "arrienda mediante"
@@ -247,6 +270,8 @@ erDiagram
     CONTRATO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
     ABONO_ARRIENDO ||--o{ DOCUMENTO : "respaldado por"
     MOVIMIENTO_FINANCIERO ||--o{ DOCUMENTO : "respaldado por"
+    PROPIEDAD ||--o{ DOCUMENTO_SUBIDA : "reserva"
+    DOCUMENTO |o--o| DOCUMENTO_SUBIDA : "se completa desde"
 ```
 
 `USUARIO` y `VALOR_UF_PERIODO` no tienen relaciones: el primero solo guarda credenciales
@@ -706,7 +731,7 @@ atómica: o se aplica el movimiento con todos sus conceptos, o no cambia nada.
 ### 4.15 `documento_subida`
 
 Reserva de subida de un solo uso (`seguridad-mvp`; migración `20261125120100_add_documento_subida`,
-**pendiente de aplicar**). Soporta la subida en dos fases (`docs/architecture.md` §13.2): el navegador
+aplicada en Neon). Soporta la subida en dos fases (`docs/architecture.md` §13.2): el navegador
 solo escribe en `clave_temporal` y el backend promueve el objeto validado a `clave_definitiva`. Las
 reservas `PENDIENTE` y `EN_PROCESO` vigentes cuentan para las cuotas de documentos. **No guarda binarios
 ni credenciales.** Los documentos registrados antes de este cambio no tienen reserva y no la necesitan:
@@ -733,7 +758,7 @@ ni credenciales.** Los documentos registrados antes de este cambio no tienen res
 ### 4.16 `login_intento`
 
 Contador de intentos de acceso por ventana fija (`seguridad-mvp`; migración
-`20261125120000_add_login_intento`, **pendiente de aplicar**). Una fila por cuenta o por IP.
+`20261125120000_add_login_intento`, aplicada en Neon). Una fila por cuenta o por IP.
 
 | Atributo | Tipo | Nulo | Restricción | Descripción |
 |---|---|---|---|---|
@@ -765,6 +790,8 @@ con ventana anterior a 1 día. Sin relaciones con el resto del modelo.
 | `abono_arriendo` | 1 : 0..N | `documento` | Asociación opcional | Excluyente |
 | `movimiento_financiero` | 1 : 0..N | `documento` | Asociación opcional | Excluyente |
 | `movimiento_financiero` | 1 : 0..N | `movimiento_concepto` | Composición | `ON DELETE CASCADE`; sin conceptos = gasto simple |
+| `propiedad` | 1 : 0..N | `documento_subida` | Composición | `ON DELETE CASCADE` |
+| `documento` | 0..1 : 0..1 | `documento_subida` | Asociación opcional | `documento_id` único, `ON DELETE SET NULL` |
 
 ### 5.1 Restricciones que la base de datos no impone
 

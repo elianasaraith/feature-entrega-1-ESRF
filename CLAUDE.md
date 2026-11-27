@@ -5,16 +5,14 @@ propiedades inmobiliarias en Chile. Evoluciona un proceso de gestión basado act
 
 ## Estado actual
 
-**Entrega 1 = solo documentación.** No se implementa código de aplicación.
+**Entrega final: MVP implementado y desplegado** en <https://realtytrack.vercel.app> (Vercel,
+PostgreSQL en Neon con 17 migraciones aplicadas y Cloudflare R2). La demo usa solo datos
+ficticios; sus credenciales se entregan por separado y nunca se versionan. T08 está cancelado.
 
-Entrega 1 no implementa tests ni despliegue, pero **sí documenta**:
+Rama de entrega: `final-project-esrf` (integrada en `main` mediante el PR #1).
 
-- la estrategia de testing prevista;
-- la arquitectura de infraestructura y despliegue propuesta.
-
-Distinguir siempre **diseñado/propuesto** de **implementado**. Las evidencias de tests
-ejecutados, despliegue real, instrucciones de instalación definitivas, UX funcionando y
-pull requests se completan en las entregas siguientes.
+Distinguir siempre **diseñado/propuesto** de **implementado**, y no afirmar ejecuciones de
+pruebas, builds o verificaciones sin evidencia.
 
 ## Estructura documental
 
@@ -132,7 +130,7 @@ independientes (T08, cancelado).
   La carga se hace por seeds o scripts controlados, no por un importador.
 - **Registrar los prompts.** El trabajo asistido por IA se documenta en `prompts.md` a
   medida que se hace, no al final.
-- **Siguientes entregas**: tipado estricto (sin `any`), lógica de negocio en servicios
+- **Código**: tipado estricto (sin `any`), lógica de negocio en servicios
   testeables, sin cálculo financiero dentro de componentes React.
 
 ## Restricciones documentales de la plantilla AI4Devs

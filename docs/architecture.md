@@ -6,8 +6,8 @@ Este documento define la arquitectura del MVP de RealtyTrack: qué componentes e
 responsabilidad tiene cada uno y por qué.
 
 > **Estado.** La aplicación (servicios, API, persistencia, autenticación, UF y documentos) está
-> implementada; este documento distingue en cada sección lo implementado de lo propuesto. El
-> **despliegue** (Vercel, Neon, variables de entorno en producción) sigue siendo diseño propuesto; el bucket de documentos (Cloudflare R2) está en uso y validado.
+> implementada y **desplegada en producción** (<https://realtytrack.vercel.app>) sobre Vercel, Neon y
+> Cloudflare R2; este documento distingue en cada sección lo implementado de lo propuesto.
 
 Es el cuarto eslabón de la cadena documental: [product.md](product.md) fija el problema,
 [user-stories.md](user-stories.md) los criterios verificables, [data-model.md](data-model.md)
@@ -208,7 +208,7 @@ después, en la siguiente lectura, a partir del monto corregido.
 app/
   (auth)/login/              pantalla de acceso
   propiedades/               cartera, detalle de propiedad y su crédito (propiedades/[id]/credito)
-  contratos/                 contratos, reajustes, pagos y abonos
+                             (contratos, pagos, movimientos y documentos en propiedades/[id]/…)
   dashboard/                 flujo financiero mensual de cartera
   api/                       Route Handlers — API REST
 server/
@@ -217,11 +217,13 @@ server/
   db/                        Prisma Client y utilidades de consulta
   uf/                        puerto ProveedorUf e implementación
   storage/                   puerto AlmacenDocumentos e implementación
-  errors/                    errores de dominio tipados
+  errors.ts                  errores de dominio tipados
 prisma/
   schema.prisma              esquema, espejo de data-model.md
   migrations/                migraciones versionadas
-  seed.ts                    carga inicial controlada y anonimizada
+  seed.ts                    carga inicial local, ficticia
+  seed-demo.ts               datos ficticios del entorno de demostración
+e2e/                         pruebas extremo a extremo (Playwright)
 ```
 
 La estructura sigue las capas de §5, no un patrón importado.
@@ -329,7 +331,7 @@ que mejor muestren esta orientación a capacidades.
 ## 9. Persistencia y acceso a datos
 
 PostgreSQL alojado en Neon, accedido mediante Prisma. El esquema de `prisma/schema.prisma`
-es el espejo directo de [data-model.md](data-model.md): trece entidades, con sus claves,
+es el espejo directo de [data-model.md](data-model.md): quince entidades, con sus claves,
 restricciones y enumeraciones.
 
 ### 9.1 Los importes se manejan como `Prisma.Decimal`
@@ -650,20 +652,18 @@ a different dependency.
 found 0 vulnerabilities
 ```
 
-### 11.5 Verificaciones pendientes antes del despliegue público
+### 11.5 Verificaciones de seguridad: estado tras el despliegue
 
-No se pudieron comprobar en el sandbox (sin red, sin puertos locales y sin aplicar migraciones):
+El sandbox de desarrollo asistido por IA (sin red ni puertos locales) no pudo comprobar estos
+puntos. Estado en la entrega final, según lo confirmado por la autora:
 
-1. Aplicar las migraciones nuevas en la base de pruebas y ejecutar las pruebas de integración
-   (`*.integration.test.ts`): concurrencia del limitador, cuotas con *advisory lock*, reclamo atómico.
-   El SQL crudo (`login-intento-store.ts`, `documento-reservas.ts`) **no se ha ejecutado** contra PostgreSQL.
-2. **R2 real:** (a) que el ETag de un objeto subido con URL prefirmada sea el MD5 de su contenido y se
-   conserve tras `CopyObject`; (b) que la copia con `x-amz-copy-source` prefirmada funcione; (c) si R2 respeta
-   `x-amz-copy-source-if-match` (optimización; la garantía no depende de ello, §13.2). Si (a) o (b) fallan, el
-   mecanismo de promoción **no queda resuelto** y debe sustituirse (p. ej. checksum SHA-256 firmado).
-3. CSP en navegador real (hidratación, gráficos, subida directa a R2) y cabeceras con `curl -I` en producción.
-4. Cookies (`httpOnly`, `Secure`, `SameSite`), `AUTH_SECRET`, `APP_ORIGINS` y `sslmode=require` en Vercel/Neon.
-5. `next build` con Turbopack (en el sandbox solo compiló con `--webpack` y fuentes simuladas).
+| # | Punto | Estado |
+|---|---|---|
+| 1 | Migraciones de `seguridad-mvp` e integración del limitador, cuotas y reclamo atómico | Las 17 migraciones están **aplicadas en Neon**. No se registra un resultado específico de esas pruebas de integración |
+| 2 | R2 real: ETag = MD5 y conservado tras `CopyObject`; copia prefirmada con `x-amz-copy-source`; `x-amz-copy-source-if-match` | La **carga de documentos se validó manualmente** contra R2 real desde la aplicación en Vercel. El supuesto ETag/MD5, el condicional y la escritura concurrente no tienen comprobación específica registrada |
+| 3 | CSP en navegador real y cabeceras con `curl -I` en producción | Sin comprobación específica registrada |
+| 4 | Cookies, `AUTH_SECRET`, `APP_ORIGINS` y `sslmode=require` en Vercel/Neon | La aplicación opera en producción (acceso y ediciones probados); los atributos y `sslmode` no tienen comprobación específica registrada |
+| 5 | `next build` con Turbopack | `npm run build` terminó con código 0 en local (26-11-2026) y la aplicación está desplegada en Vercel |
 
 ---
 
@@ -847,7 +847,8 @@ devuelve el mismo documento (200). La clave se valida con una forma exacta
 La garantía **no depende de que R2 respete los condicionales**: si el temporal cambia en cualquier punto, un
 ETag difiere, la promoción se rechaza y el definitivo se elimina. Se apoya en que el ETag de una carga de
 una parte es el MD5 del contenido; **ese supuesto y la copia prefirmada deben comprobarse en R2 real** antes
-de publicar (§11.5); hasta entonces el riesgo está mitigado en código y **no se da por resuelto**. La validación
+de publicar (§11.5). La carga se validó manualmente contra R2 real desde producción, pero ese supuesto
+no tiene una comprobación específica registrada y la garantía ante escrituras concurrentes **no se da por probada en R2**. La validación
 cubre tamaño, `Content-Type` y firma de formato (PDF, JPEG, PNG, WebP; 20 MB); un objeto que no cumple se
 borra. Las credenciales viven solo en variables de entorno del servidor (nunca `NEXT_PUBLIC_*`) y no se
 registran en logs; el DTO de documento no expone la clave del objeto.
@@ -893,23 +894,24 @@ Es lo que hace verificable el criterio de éxito 10 de `product.md` §10.
 
 ## 15. Infraestructura y despliegue
 
-> Diseño propuesto. En Entrega 1 no existe despliegue real.
+> **Implementado:** aplicación desplegada y operativa en <https://realtytrack.vercel.app>.
 
 ```mermaid
 flowchart LR
-    Dev["Repositorio Git"] -->|"push a rama"| Preview["Vercel<br/>despliegue de vista previa"]
-    Dev -->|"merge a main"| Prod["Vercel<br/>producción"]
-    Prod --> NeonProd[("Neon<br/>base de producción")]
-    Prod --> S3P[("Object storage")]
-    Preview --> NeonPrev[("Base para vistas previa<br/>estrategia pendiente")]
+    Navegador["Navegador"] --> Prod["Vercel<br/>realtytrack.vercel.app"]
+    Prod --> NeonProd[("Neon<br/>PostgreSQL")]
+    Prod --> UF["findic.cl<br/>API de UF"]
+    Prod -->|"firma URLs"| R2[("Cloudflare R2<br/>bucket privado de demo")]
+    Navegador -->|"subida directa con URL firmada"| R2
 ```
 
-| Aspecto | Decisión |
+| Aspecto | Estado |
 |---|---|
-| Alojamiento | Vercel, conectado al repositorio |
-| Vistas previa | Cada PR genera un despliegue propio |
-| Producción | Despliegue desde `main` |
-| Base de datos | Neon |
+| Alojamiento | Vercel |
+| Base de datos | Neon, con las 17 migraciones aplicadas |
+| Documentos | Cloudflare R2, bucket independiente para la demo |
+| Datos de demostración | `npm run db:seed:demo` ejecutado: 3 propiedades, 6 meses de histórico y 17 abonos ficticios |
+| Credenciales de demostración | Se entregan por separado a los evaluadores; no se versionan |
 
 ### 15.1 Migraciones
 
@@ -922,8 +924,8 @@ despliegues concurrentes: dos builds simultáneos pueden intentar migrar a la ve
 **No se cierra en este documento.** Las opciones son una base de desarrollo compartida por
 todos los despliegues de vista previa, o el *branching* de Neon con una base por PR.
 
-La elección se hará en la fase de implementación, cuando exista despliegue real y se conozcan
-las necesidades concretas de las pruebas sobre vistas previa.
+No hay una decisión ni una configuración de vistas previa documentada; queda fuera del cierre del
+MVP.
 
 ---
 
@@ -943,7 +945,7 @@ las necesidades concretas de las pruebas sobre vistas previa.
 
 - Los secretos se gestionan en las variables de entorno de la plataforma, con valores
   distintos por entorno.
-- `.env.local` **nunca** se versiona. Se versiona un `.env.example` con los nombres y sin
+- Los archivos `.env*` (incluidos `.env.local` y `.env.production.local`) **nunca** se versionan. Se versiona un `.env.example` con los nombres y sin
   valores.
 - **Ninguna credencial usa el prefijo público** de Next.js: ese prefijo incrusta el valor en
   el paquete que se envía al navegador. Solo lo usan valores que puedan ser públicos.
@@ -986,15 +988,18 @@ queda fuera del MVP.
 
 ## 18. Estrategia de testing
 
-> Entrega 1 **documenta** esta estrategia. No implementa tests ni aporta evidencias de
-> ejecución; eso corresponde a las entregas siguientes.
+> **Implementado:** pruebas unitarias y de integración con `node --test` (`npm test`) y cinco
+> escenarios E2E con Playwright (`npm run test:e2e`). En la validación final local (26-11-2026)
+> pasaron todas las pruebas de `npm test`, `npm run build` compiló correctamente y dos ejecuciones
+> consecutivas de E2E dieron 5 de 5; la evidencia y sus límites están en `readme.md` §2.6. No hay pruebas de componentes de interfaz. La
+> tabla describe la estrategia.
 
 | Nivel | Qué cubre | Por qué ahí |
 |---|---|---|
 | **Unitario sobre el dominio** | Precedencia de los cuatro estados y sus calificaciones · fecha de completitud, incluidos abonos del mismo día · monto vigente ante reajuste retroactivo · imputación al mes de caja · conversión UF → CLP | Es donde vive el riesgo real, y son funciones puras: se prueban con tablas de casos, sin base de datos |
 | **Integración de servicios** | Las invariantes de `data-model.md` §5.1 que la base no impone: no solapamiento de contratos, documento coherente con su propiedad, monto esperado alineado con `contrato_monto` | Requieren PostgreSQL real; un doble no las verificaría |
 | **API** | Códigos de estado, validación de entrada y control de acceso | Es el contrato de la capa REST |
-| **Extremo a extremo** | Un recorrido por HU01, HU02 y HU03 | *Propuesta a validar*: el valor está en los dos primeros niveles |
+| **Extremo a extremo** | Credenciales inválidas, flujo principal, hipoteca, finanzas y arriendos, contra una base de pruebas aislada; sin documentos | El mayor valor sigue en los dos primeros niveles |
 
 **Los casos límite de `user-stories.md` son directamente los casos de prueba.** Se
 escribieron con esa forma a propósito: HU02 CL11 a CL15, HU01 CL10 a CL12 y HU03 CL12 a CL14
@@ -1106,12 +1111,12 @@ controlado y anonimizado, sin importador.
 
 | # | Propuesta | Estado |
 |---|---|---|
-| V1 | **Proveedor concreto de object storage** — R2, S3 o B2 | La interfaz está cerrada (§13.1); el proveedor no |
+| V1 | **Proveedor concreto de object storage** — R2, S3 o B2 | **Cerrada:** Cloudflare R2 (§13.1) |
 | V2 | **API concreta de UF** | **Cerrada en T10:** findic.cl; el puerto la aísla (§12.1) |
 | V3 | **Día de la UF que representa a cada período** | **Cerrada en T10:** día 1 del mes (§12.5; `data-model.md` §8.4, D17) |
-| V4 | **Aislamiento de datos en vistas previa** | Pendiente para la fase de implementación (§15.2) |
+| V4 | **Aislamiento de datos en vistas previa** | Pendiente (§15.2) |
 | V5 | **Observabilidad externa** | Fuera del MVP; los logs de la plataforma bastan (§17) |
-| V6 | **Pruebas extremo a extremo** | El valor está en los niveles unitario y de integración (§18) |
+| V6 | **Pruebas extremo a extremo** | **Cerrada:** cinco escenarios con Playwright (§18) |
 
 ---
 

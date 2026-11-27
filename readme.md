@@ -41,17 +41,25 @@ consolidación manual.
 
 ### **0.4. URL del proyecto:**
 
-**Demo en producción:** <https://realtytrack.vercel.app>
+**URL de la aplicación:** <https://realtytrack.vercel.app>
 
-- **Credenciales:** el acceso es de usuario único y no hay registro. El email y la
-  contraseña de demostración **se entregan por separado a los evaluadores** y no están en el
-  repositorio.
-- **Datos:** exclusivamente **ficticios** (seed de demostración: 3 propiedades, 6 meses de
-  histórico y 17 abonos). Los documentos se guardan en un bucket de R2 independiente para la
-  demo.
-- **Al probar:** el entorno es compartido y los cambios persisten; no ingrese datos ni
-  documentos reales. Tras 5 intentos de acceso a una cuenta en 15 minutos, el login se
-  bloquea temporalmente.
+**Acceso de demostración** (credenciales publicadas a propósito para la evaluación académica;
+sirven solo para el usuario de la demo):
+
+- **Email:** demo@realtytrack.example.com
+- **Contraseña:** LIDRpassword
+
+Condiciones de uso:
+
+- La aplicación utiliza autenticación de **usuario único** y **no requiere registro**.
+- El entorno contiene **exclusivamente datos ficticios** (seed de demostración: 3 propiedades,
+  6 meses de histórico y 17 abonos). Los documentos se guardan en un bucket de R2
+  independiente para la demo.
+- Los evaluadores pueden **crear, editar y consultar** registros, y **cargar documentos de
+  prueba**.
+- El entorno es **compartido** y **los cambios persisten**.
+- **No introduzca datos personales ni financieros reales, ni documentos reales.**
+- Tras 5 intentos de acceso a la cuenta en 15 minutos, el login se bloquea temporalmente.
 
 El video [`realtytrack-entrega2.mp4`](realtytrack-entrega2.mp4), en la raíz, es evidencia de
 la **entrega anterior** (Entrega 2) y no muestra el rediseño ni todas las funcionalidades
@@ -61,9 +69,14 @@ actuales.
 
 `https://github.com/elianasaraith/feature-entrega-1-ESRF.git`
 
-La **entrega final** está en la rama `final-project-esrf`, integrada en `main` mediante el
-PR #1 (sección 7). Las ramas `feature/entrega-1-ESRF` y `feature/entrega-2-ESRF` conservan
-las entregas anteriores.
+| Rama | Enlace |
+|---|---|
+| `main` (rama principal) | <https://github.com/elianasaraith/feature-entrega-1-ESRF/tree/main> |
+| `final-project-esrf` (rama oficial de entrega académica) | <https://github.com/elianasaraith/feature-entrega-1-ESRF/tree/final-project-esrf> |
+
+Los cambios de la entrega final, incluido el cierre documental, se integran en `main`; la rama
+`final-project-esrf` se mantiene para cumplir los requisitos del máster. Las ramas
+`feature/entrega-1-ESRF` y `feature/entrega-2-ESRF` conservan las entregas anteriores.
 
 ---
 
@@ -177,7 +190,7 @@ npm install
 cp .env.example .env
 ```
 
-Variables que usa el código (solo nombres; los valores nunca se versionan):
+Variables que usa el código (se listan solo los nombres; los secretos nunca se versionan):
 
 | Variable | Cuándo se necesita |
 |---|---|
@@ -316,7 +329,8 @@ automatizada, pero **no se comprobó visualmente**. Detalle: `docs/work-tickets.
 **Ampliaciones posteriores (implementadas y verificadas: pruebas automatizadas, build y validación manual):**
 - *Dashboard:* histórico de 6 meses (hasta 12) por `GET /api/dashboard/historico`, saldo
   hipotecario consolidado (UF, equivalente en CLP, estados completo/parcial/sin saldos) y
-  navegación entre meses; sin gráficos (`docs/work-tickets.md` §4.9).
+  navegación entre meses; gráficos con Recharts de ingresos, egresos y flujo neto
+  (`docs/work-tickets.md` §4.9).
 - *Arrendatarios:* edición (`PUT /api/arrendatarios/{id}`); sin eliminación.
 - *Montos de arriendo:* corrección y eliminación de reajustes, y alta de reajustes, solo si no
   cambian pagos con abonos (422 en caso contrario); el escenario con abonos queda pendiente de
@@ -515,7 +529,11 @@ Detalle: [docs/architecture.md](docs/architecture.md) §15.
   de registro.
 - Validación de entradas con Zod en el borde de la API y errores de dominio traducidos a
   HTTP en un único punto (`server/errors.ts`).
-- Ningún secreto versionado: `.env*` está en `.gitignore` salvo `.env.example`.
+- Los **secretos de infraestructura** (conexiones de PostgreSQL/Neon, credenciales de Vercel y
+  Cloudflare R2, `AUTH_SECRET`, `DOCUMENT_UPLOAD_SECRET` y tokens) **nunca se versionan**; `.env*`
+  está en `.gitignore` salvo `.env.example`. La única excepción deliberada son las credenciales
+  del usuario de demostración (sección 0.4), públicas para la evaluación y limitadas a un entorno
+  con datos ficticios.
 - Pruebas de integración aisladas: solo escriben en `TEST_DATABASE_URL`, distinta de la
   base de desarrollo.
 
@@ -849,7 +867,7 @@ y el tercero un contador de intentos de acceso.
 | `credito_registro_mensual` | Serie mensual del dividendo pagado y el saldo informado por el banco | PK `id`; FK `credito_id` | `UNIQUE(credito_id, periodo)`; dos `CHECK` — no ambos datos nulos; `fecha_pago_dividendo` presente si y solo si hay dividendo |
 | `arrendatario` | Persona que arrienda, reutilizable entre contratos sucesivos | PK `id`; `rut` UNIQUE nulable | — |
 | `contrato_arriendo` | Contrato de arriendo de una propiedad, con su vigencia y garantía | PK `id`; FK `propiedad_id`, `arrendatario_id` | Sin columna `estado`: la vigencia se deriva de `fecha_inicio`/`fecha_termino` |
-| `contrato_monto` | Histórico de los montos aplicados a lo largo de un contrato | PK `id`; FK `contrato_id` | `UNIQUE(contrato_id, vigente_desde_periodo)`; el monto inicial es su primera fila, no una columna del contrato (el monto inicial es opcional en el alta: sin él el contrato no tiene fila y no genera pagos esperados hasta registrar el primer monto, T05; propuesta a validar). Los reajustes agregan filas y nunca modifican las anteriores |
+| `contrato_monto` | Histórico de los montos aplicados a lo largo de un contrato | PK `id`; FK `contrato_id` | `UNIQUE(contrato_id, vigente_desde_periodo)`; el monto inicial es su primera fila, no una columna del contrato (el monto inicial es opcional en el alta: sin él el contrato no tiene fila y no genera pagos esperados hasta registrar el primer monto, T05; propuesta a validar). Cada reajuste agrega una fila sin alterar las anteriores. Una fila puede corregirse (monto y motivo, no su período) y un reajuste puede eliminarse; el monto inicial no se elimina. Alta, corrección y eliminación se rechazan (422), sin cambios parciales, si modificarían el monto esperado de un pago con abonos; los abonos nunca se modifican |
 | `pago_esperado` | Lo que se espera cobrar por arriendo en un período mensual | PK `id`; FK `contrato_id` | `UNIQUE(contrato_id, periodo)`; `CHECK` monto > 0 y período día 1; snapshot del monto vigente en ese mes. Lo crea una sincronización explícita e idempotente (T05) y un reajuste solo actualiza `monto_esperado_clp` desde su período |
 | `abono_arriendo` | Cada entrega de dinero recibida contra un pago esperado | PK `id`; FK `pago_esperado_id` | Sin tope: los abonos pueden exceder el monto esperado sin rechazar el registro |
 | `movimiento_financiero` | Egresos e inversiones de una propiedad | PK `id`; FK `propiedad_id` | `ENUM categoria_movimiento` sin valor `DIVIDENDO`, para no duplicar esa salida de dinero. `monto_clp` es siempre el total del gasto: si está desglosado, es la suma de sus conceptos y las agregaciones no los suman de nuevo |
@@ -920,7 +938,8 @@ ticket.
 ### 4.1 `POST /api/propiedades/{propiedadId}/contratos/{contratoId}/montos`
 
 Registrar el primer monto o un reajuste del monto de arriendo (T05, **implementado**).
-Escribe una nueva fila en `contrato_monto` —nunca modifica ni elimina las anteriores— y
+Este `POST` escribe una nueva fila en `contrato_monto` —sin modificar ni eliminar las
+anteriores— y
 actualiza `monto_esperado_clp` de los `pago_esperado` ya existentes desde su período, sin
 alterar los meses anteriores (`docs/data-model.md` §4.7–§4.8). No crea pagos: eso lo hace la
 operación explícita `POST .../pagos-esperados/sincronizar`, que genera los pagos faltantes
@@ -958,7 +977,7 @@ paths:
         "400": { description: "Entrada inválida (monto o período mal formado)" }
         "404": { description: "Propiedad o contrato inexistente, o el contrato no pertenece a la propiedad" }
         "409": { description: "Ya existe un monto para ese período" }
-        "422": { description: "Primer monto distinto del mes de inicio, o período fuera de la vigencia del contrato" }
+        "422": { description: "Primer monto distinto del mes de inicio, período fuera de la vigencia del contrato, o el cambio modificaría el monto esperado de un pago con abonos" }
 ```
 
 Ejemplo:
@@ -981,8 +1000,14 @@ Respuesta `201`:
 }
 ```
 
-Verificado: `npm test` (144 pruebas, 0 fallidas), TypeScript, lint y revisión manual de
-la interfaz de montos. El borrado y la edición de filas de monto no existen (405).
+**Restricción por abonos (422).** Si el nuevo monto modificaría el esperado de algún pago que ya
+tiene abonos, la respuesta es 422 con los períodos afectados y no cambia nada: ni los montos, ni
+los pagos, ni los abonos. Un pago con abonos cuyo esperado no cambia no bloquea la operación. La
+misma regla se aplica a la corrección y a la eliminación de montos, que la aplicación también
+ofrece; el monto inicial puede corregirse, pero no eliminarse (422).
+
+*Evidencia histórica (cierre de T05):* `npm test` (144 pruebas, 0 fallidas), TypeScript, lint y
+revisión manual de la interfaz de montos. La corrección y la eliminación se añadieron después.
 
 ### 4.2 `POST /api/propiedades/{propiedadId}/contratos/{contratoId}/pagos-esperados/{pagoId}/abonos`
 
@@ -1163,8 +1188,10 @@ Criterios de aceptación representativos:
 - Un pago vencido con abonos parciales se presenta como vencido, indicando
   explícitamente el total recibido y el saldo pendiente — nunca como un
   quinto estado (Caso límite 11).
-- Un reajuste retroactivo recalcula el monto esperado y, con él, el estado ya
-  derivado de los pagos afectados (Escenario 5; Casos límite 12–13).
+- Un reajuste retroactivo actualiza el monto esperado de los pagos afectados **sin abonos**, y
+  su estado se deriva con ese monto. Si modificaría el esperado de un pago **con abonos**, se
+  rechaza (422) sin cambios. Esta regla vigente reemplaza, para los reajustes, el efecto sobre
+  pagos abonados que describen el Escenario 5 y los Casos límite 12–13 del diseño original.
 
 Detalle íntegro (13 escenarios, 5 casos límite):
 [docs/user-stories.md](docs/user-stories.md) — HU02.
@@ -1230,7 +1257,7 @@ ninguno de los dos.
 | AC1 | E6/E7 | Un abono o la suma de varios que alcanza el esperado deja el pago en `PAGADO` |
 | AC2 | E8/E9/E10 | Pendiente sin abonos y sin vencer; parcial sin vencer; vencido sin abonos |
 | AC3 | CL11 | Un pago con abonos parciales cuya fecha ya pasó queda `VENCIDO`, con su total recibido y saldo pendiente |
-| AC4 | CL12/CL13 | Un reajuste que descubre un pago aplica la misma precedencia, sin tratamiento especial |
+| AC4 | CL12/CL13 (regla vigente) | Un reajuste que modificaría el esperado de un pago con abonos se rechaza (422) y su monto, abonos y estado no cambian; la precedencia de derivación no varía y se aplica siempre al monto esperado vigente |
 | AC5 | CL14 | Abonos que superan el monto esperado dejan el pago `PAGADO` |
 
 **Entidades:** `abono_arriendo`; lee `pago_esperado`.
@@ -1372,5 +1399,7 @@ producción; sus últimos commits son:
 | `ab2aa34` | Endurecimiento de seguridad y pruebas E2E |
 | `60b4fb8` | Seed de demostración y configuración de entorno |
 
-Es el único pull request documentado de este trabajo. Las fusiones `#107` y `#111` visibles en el
+El PR #1 se conserva como evidencia histórica: su alcance llega hasta el commit `60b4fb8` y no
+incluye el cierre documental posterior, que se integra en `main` mediante un pull request
+aparte. Las fusiones `#107` y `#111` visibles en el
 historial corresponden a trabajo de otros colaboradores sobre el repositorio base, ya revertido.

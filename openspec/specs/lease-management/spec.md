@@ -222,7 +222,7 @@ El sistema SHALL guardar `garantiaClp` (entero CLP mayor o igual que 0, opcional
 - **THEN** el sistema responde 400
 
 ### Requirement: Endpoints y páginas de contratos protegidos por sesión
-El sistema SHALL exigir sesión en todos los endpoints de contratos, arrendatarios, montos y sincronización de pagos esperados, respondiendo 401 sin ella, y SHALL redirigir a `/login` las páginas de contratos y de montos sin sesión. Los endpoints de contratos y montos SHALL NOT exponer `DELETE` (405).
+El sistema SHALL exigir sesión en todos los endpoints de contratos, arrendatarios, montos y sincronización de pagos esperados, respondiendo 401 sin ella, y SHALL redirigir a `/login` las páginas de contratos y de montos sin sesión. El recurso de un contrato, el de un arrendatario y la colección de montos de un contrato SHALL NOT exponer `DELETE` (405). El recurso de un monto individual (`.../montos/{montoId}`) sí expone `DELETE`, regido por el requisito «Eliminación guardada de un reajuste».
 
 #### Scenario: Endpoint sin sesión
 - **WHEN** se llama a cualquier endpoint de contratos, arrendatarios, montos o sincronización sin sesión
@@ -233,11 +233,11 @@ El sistema SHALL exigir sesión en todos los endpoints de contratos, arrendatari
 - **THEN** el sistema redirige a `/login`
 
 #### Scenario: DELETE no disponible
-- **WHEN** se envía `DELETE` a un contrato, a un arrendatario o a un monto
+- **WHEN** se envía `DELETE` a un contrato, a un arrendatario o a la colección de montos de un contrato
 - **THEN** el sistema responde 405
 
 ### Requirement: Registro del primer monto y de reajustes
-El sistema SHALL permitir registrar una fila de `contrato_monto` con `montoMensualClp` (entero CLP mayor que 0), `vigenteDesdePeriodo` (mes `YYYY-MM`, almacenado como día 1) y `motivo` opcional, en una única transacción protegida por el bloqueo por propiedad. Si el contrato no tiene ninguna fila, el período MUST ser el mes de `fechaInicio`. Si ya tiene filas, el período MUST estar entre el mes de `fechaInicio` y el mes de `fechaTermino`, ambos inclusive: un período fuera de ese rango SHALL responder 422 y un período ya registrado SHALL responder 409. El sistema SHALL agregar filas y MUST NOT modificar ni eliminar filas anteriores, ni exponer operaciones para ello. El contrato conserva su identidad, arrendatario y garantía.
+El sistema SHALL permitir registrar una fila de `contrato_monto` con `montoMensualClp` (entero CLP mayor que 0), `vigenteDesdePeriodo` (mes `YYYY-MM`, almacenado como día 1) y `motivo` opcional, en una única transacción protegida por el bloqueo por propiedad. Si el contrato no tiene ninguna fila, el período MUST ser el mes de `fechaInicio`. Si ya tiene filas, el período MUST estar entre el mes de `fechaInicio` y el mes de `fechaTermino`, ambos inclusive: un período fuera de ese rango SHALL responder 422 y un período ya registrado SHALL responder 409. El registro SHALL agregar filas y MUST NOT modificar ni eliminar filas anteriores; la corrección y la eliminación son operaciones separadas, regidas por «Corrección de un monto de arriendo» y «Eliminación guardada de un reajuste». El contrato conserva su identidad, arrendatario y garantía.
 
 #### Scenario: Primer monto de un contrato sin monto
 - **WHEN** se registra 500000 con período igual al mes de `fechaInicio` en un contrato sin filas de `contrato_monto`

@@ -911,7 +911,7 @@ flowchart LR
 | Base de datos | Neon, con las 17 migraciones aplicadas |
 | Documentos | Cloudflare R2, bucket independiente para la demo |
 | Datos de demostración | `npm run db:seed:demo` ejecutado: 3 propiedades, 6 meses de histórico y 17 abonos ficticios |
-| Credenciales de demostración | Se entregan por separado a los evaluadores; no se versionan |
+| Credenciales de demostración | Públicas a propósito para la evaluación académica; se publican únicamente en `readme.md` §0.4 |
 
 ### 15.1 Migraciones
 
@@ -949,7 +949,10 @@ MVP.
   valores.
 - **Ninguna credencial usa el prefijo público** de Next.js: ese prefijo incrusta el valor en
   el paquete que se envía al navegador. Solo lo usan valores que puedan ser públicos.
-- Ningún secreto en el repositorio, coherente con la regla de anonimización de `CLAUDE.md`.
+- Ningún secreto de infraestructura ni credencial privada en el repositorio, coherente con la regla
+  de anonimización de `CLAUDE.md`. Las credenciales del usuario de demostración no son un secreto de
+  infraestructura: se publican de forma deliberada, solo en `readme.md` §0.4, para un entorno con
+  datos ficticios.
 
 ---
 

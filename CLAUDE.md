@@ -7,7 +7,9 @@ propiedades inmobiliarias en Chile. Evoluciona un proceso de gestión basado act
 
 **Entrega final: MVP implementado y desplegado** en <https://realtytrack.vercel.app> (Vercel,
 PostgreSQL en Neon con 17 migraciones aplicadas y Cloudflare R2). La demo usa solo datos
-ficticios; sus credenciales se entregan por separado y nunca se versionan. T08 está cancelado.
+ficticios. Las credenciales del usuario de demostración son públicas y se publican únicamente en
+`readme.md` §0.4; los secretos de infraestructura y las credenciales privadas nunca se versionan.
+T08 está cancelado.
 
 Rama de entrega: `final-project-esrf` (integrada en `main` mediante el PR #1).
 
